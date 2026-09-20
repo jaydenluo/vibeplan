@@ -38,6 +38,9 @@ importers:
       fastify:
         specifier: ^5.2.1
         version: 5.12.5
+      jose:
+        specifier: ^5.10.0
+        version: 5.10.0
       postgres:
         specifier: ^3.4.5
         version: 3.4.9
@@ -1526,6 +1529,9 @@ packages:
   isexe@3.1.5:
     resolution: {integrity: sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w==}
     engines: {node: '>=18'}
+
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -3055,6 +3061,8 @@ snapshots:
   ipaddr.js@2.5.0: {}
 
   isexe@3.1.5: {}
+
+  jose@5.10.0: {}
 
   js-tokens@4.0.0: {}
 
