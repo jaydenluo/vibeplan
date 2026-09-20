@@ -44,6 +44,8 @@ export const workItemSchema = z.object({
 
 export type WorkItem = z.infer<typeof workItemSchema>;
 export type WorkItemStatus = z.infer<typeof workItemStatusSchema>;
+export type WorkItemType = z.infer<typeof workItemTypeSchema>;
+export type Priority = z.infer<typeof prioritySchema>;
 
 const transitions: Record<WorkItemStatus, readonly WorkItemStatus[]> = {
   backlog: ['ready', 'cancelled'],
