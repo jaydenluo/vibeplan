@@ -60,6 +60,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@vibe/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       commander:
         specifier: ^13.1.0
         version: 13.1.0
@@ -109,6 +112,8 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+
+  packages/templates: {}
 
 packages:
 

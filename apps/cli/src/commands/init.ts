@@ -1,8 +1,9 @@
-import { cpSync, existsSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadProjectConfig, decideInitAction, writeProjectConfig, type ProjectConfig } from '../config.js';
 import { ApiClient } from '../api-client.js';
 import { loadSession } from '../auth.js';
+import { agentsInstructions, projectInstructions } from '@vibe/templates';
 
 export async function initProject(projectId: string, force = false, root = process.cwd()): Promise<void> {
   const session = await loadSession();
@@ -20,5 +21,7 @@ export async function initProject(projectId: string, force = false, root = proce
   writeProjectConfig(config, root);
   mkdirSync(join(root, '.vibe', 'tasks'), { recursive: true });
   mkdirSync(join(root, '.vibe', 'cache'), { recursive: true });
+  writeFileSync(join(root, 'AGENTS.md'), agentsInstructions(), 'utf8');
+  writeFileSync(join(root, '.vibe', 'instructions.md'), projectInstructions(), 'utf8');
   console.log(`Initialized Vibe Plan project ${project.id}.`);
 }

@@ -20,6 +20,11 @@ input:focus { border-color: #477087; outline: 3px solid #47708722; }
 .workspace-page { min-height: 100vh; padding: 28px clamp(18px, 4vw, 56px); }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; max-width: 1440px; margin: 0 auto; }
 .topbar h1 { font-size: 25px; }
+.context-bar { display: flex; flex-wrap: wrap; gap: 12px; max-width: 1440px; margin: 24px auto 0; }
+.context-bar label { min-width: 170px; }
+.context-bar select { border: 1px solid #cbd5dd; border-radius: 7px; padding: 9px 10px; color: #29343c; background: #fff; }
+.workspace-error { max-width: 1440px; margin: 14px auto 0; }
+.empty-state { max-width: 1440px; margin: 60px auto; border: 1px dashed #c5d4dc; border-radius: 8px; padding: 48px; color: #71808a; text-align: center; background: #fff; }
 .project-tabs { display: flex; gap: 22px; max-width: 1440px; margin: 28px auto 20px; border-bottom: 1px solid #d6dfe5; }
 .project-tabs button { padding: 0 0 12px; color: #73818b; }
 .project-tabs .active { color: #2f657d; border-bottom: 2px solid #2f657d; }
