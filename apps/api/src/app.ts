@@ -183,6 +183,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return access.listProjects(params.organizationId, await authenticatedUserId(request));
   });
 
+  app.get('/projects/:projectId', async (request) => {
+    const params = request.params as { projectId: string };
+    return access.getProject(await authenticatedUserId(request), params.projectId);
+  });
+
   app.post('/teams/:teamId/projects', async (request, reply) => {
     const params = request.params as { teamId: string };
     const body = projectSchema.parse(request.body);

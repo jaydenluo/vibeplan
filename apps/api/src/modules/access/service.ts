@@ -108,6 +108,20 @@ export class AccessService {
     return this.database.select().from(projects).where(inArray(projects.teamId, teamIds)).orderBy(asc(projects.createdAt));
   }
 
+  async getProject(userId: string, projectId: string) {
+    const [project] = await this.database
+      .select({ project: projects, organizationId: teams.organizationId })
+      .from(projects)
+      .innerJoin(teams, eq(projects.teamId, teams.id))
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    if (!project) throw new AccessError('NOT_FOUND', 'Project does not exist or is not accessible.');
+    const visible = await this.listProjects(project.organizationId, userId);
+    const match = visible.find((item) => item.id === project.project.id);
+    if (!match) throw new AccessError('NOT_FOUND', 'Project does not exist or is not accessible.');
+    return project.project;
+  }
+
   private async organizationRole(userId: string, organizationId: string): Promise<string> {
     const [membership] = await this.database
       .select({ role: organizationMemberships.role })
