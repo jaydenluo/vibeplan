@@ -1,0 +1,11 @@
+{
+  "name": "@vibe/core",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}
