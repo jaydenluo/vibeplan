@@ -38,7 +38,20 @@ export const workItemSchema = z.object({
   parentId: z.string().min(1).nullable(),
   dependsOn: z.array(z.string().min(1)).default([]),
   acceptanceCriteria: z.array(z.string().min(1)).default([]),
+  acceptanceItems: z.array(z.object({
+    id: z.string().min(1),
+    text: z.string().min(1),
+    required: z.boolean(),
+    status: z.enum(['unverified', 'passed', 'failed', 'needs_info']),
+    comment: z.string(),
+    evidence: z.array(z.object({ label: z.string().min(1), url: z.string().url() })),
+    reviewedBy: z.string().uuid().nullable(),
+    reviewedAt: z.string().datetime().nullable(),
+  })).default([]),
   estimate: z.number().int().nonnegative().nullable(),
+  actualHours: z.number().nonnegative().nullable().optional(),
+  planMarkdown: z.string().nullable().optional(),
+  startedAt: z.string().datetime().nullable().optional(),
   version: z.number().int().positive(),
 });
 

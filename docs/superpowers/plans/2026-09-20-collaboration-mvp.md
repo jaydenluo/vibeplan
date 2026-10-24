@@ -55,7 +55,7 @@ Use a root script that delegates to packages:
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --parallel --filter @vibe/api --filter @vibe/web dev",
+    "dev": "pnpm --parallel --filter @vibeplan/api --filter @vibeplan/web dev",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },
@@ -140,7 +140,7 @@ Create tables for `users`, `organizations`, `organization_memberships`, `teams`,
 
 - [ ] **Step 4: Run migrations and tests**
 
-Run: `pnpm --filter @vibe/api db:migrate && pnpm vitest run apps/api/src/db/schema.test.ts`
+Run: `pnpm --filter @vibeplan/api db:migrate && pnpm vitest run apps/api/src/db/schema.test.ts`
 Expected: PASS with all foreign-key and scope tests passing.
 
 - [ ] **Step 5: Commit**
@@ -285,7 +285,7 @@ Test that unauthenticated users see login/register, authenticated users see only
 
 - [ ] **Step 2: Run the failing UI tests**
 
-Run: `pnpm --filter @vibe/web test`
+Run: `pnpm --filter @vibeplan/web test`
 Expected: FAIL because the Vite app and components do not exist.
 
 - [ ] **Step 3: Implement the web app**
@@ -298,7 +298,7 @@ Connect to the selected project's event stream, refetch changed work items, and 
 
 - [ ] **Step 5: Run the UI tests and build**
 
-Run: `pnpm --filter @vibe/web test && pnpm --filter @vibe/web build`
+Run: `pnpm --filter @vibeplan/web test && pnpm --filter @vibeplan/web build`
 Expected: PASS and a production bundle in `apps/web/dist`.
 
 - [ ] **Step 6: Commit**
@@ -308,7 +308,7 @@ git add apps/web
 git commit -m "feat: add realtime project workspace web UI"
 ```
 
-## Task 8: Build the local `vibe` CLI
+## Task 8: Build the local `vibeplan` CLI
 
 **Files:**
 - Create: `apps/cli/src/config.ts`
@@ -324,11 +324,11 @@ git commit -m "feat: add realtime project workspace web UI"
 
 - [ ] **Step 1: Write CLI behavior tests**
 
-Test command parsing, `vibe login` device flow using a fake API client, `vibe init --project-id` creation, same-project reinitialization, different-project refusal, `--force` backup, and task start/report request payloads.
+Test command parsing, `vibeplan login` device flow using a fake API client, `vibeplan init --project-id` creation, same-project reinitialization, different-project refusal, `--force` backup, and task start/report request payloads.
 
 - [ ] **Step 2: Run the failing CLI tests**
 
-Run: `pnpm --filter @vibe/cli test`
+Run: `pnpm --filter @vibeplan/cli test`
 Expected: FAIL because CLI commands do not exist.
 
 - [ ] **Step 3: Implement config and credential storage**
@@ -337,18 +337,18 @@ Store non-secret project context in `.vibe/project.yaml`. Store access and refre
 
 - [ ] **Step 4: Implement commands**
 
-Implement `vibe login`, `vibe whoami`, `vibe init --project-id`, `vibe org/team use`, `vibe task list/show/start/report`, and `vibe check`. `init` must back up conflicting `.vibe` state before `--force` replacement and must refuse inaccessible project IDs.
+Implement `vibeplan login`, `vibeplan whoami`, `vibeplan init --project-id`, `vibeplan org/team use`, `vibeplan task list/show/start/report`, and `vibeplan check`. `init` must back up conflicting `.vibe` state before `--force` replacement and must refuse inaccessible project IDs.
 
 - [ ] **Step 5: Run CLI tests and build**
 
-Run: `pnpm --filter @vibe/cli test && pnpm --filter @vibe/cli build`
+Run: `pnpm --filter @vibeplan/cli test && pnpm --filter @vibeplan/cli build`
 Expected: PASS and a runnable CLI entrypoint.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add apps/cli
-git commit -m "feat: add local vibe project and task CLI"
+git commit -m "feat: add local vibeplan project and task CLI"
 ```
 
 ## Task 9: Add project templates, Docker deployment, and end-to-end verification
@@ -378,7 +378,7 @@ Generate a concise root `AGENTS.md` that points Codex to `.vibe/instructions.md`
 
 - [ ] **Step 4: Add production containers and README setup**
 
-Document SMTP configuration, database migration, first-user registration, organization creation, CLI installation, `vibe init --project-id`, and local development commands. Keep secrets in environment variables and exclude `.env` from Git.
+Document SMTP configuration, database migration, first-user registration, organization creation, CLI installation, `vibeplan init --project-id`, and local development commands. Keep secrets in environment variables and exclude `.env` from Git.
 
 - [ ] **Step 5: Run all verification commands**
 
@@ -403,4 +403,4 @@ git commit -m "feat: package collaboration MVP for self hosted deployment"
 
 ## Deferred follow-up plan: Git graph and Understand-Anything adapter
 
-After the collaboration MVP is working, create a separate plan for `vibe index`, Tree-sitter-based incremental indexing, task-to-code links, graph snapshot upload, and optional Understand-Anything import. This keeps graph analysis isolated from authentication and task synchronization.
+After the collaboration MVP is working, create a separate plan for `vibeplan index`, Tree-sitter-based incremental indexing, task-to-code links, graph snapshot upload, and optional Understand-Anything import. This keeps graph analysis isolated from authentication and task synchronization.

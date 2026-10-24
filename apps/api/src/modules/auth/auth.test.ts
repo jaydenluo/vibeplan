@@ -6,8 +6,17 @@ import { AuthService, AuthError, type Mailer } from './service.js';
 
 class TestMailer implements Mailer {
   verificationTokens: string[] = [];
+  registrationCodes: string[] = [];
+
+  async sendRegistrationCode(_email: string, code: string): Promise<void> {
+    this.registrationCodes.push(code);
+  }
 
   async sendVerification(_email: string, token: string): Promise<void> {
+    this.verificationTokens.push(token);
+  }
+
+  async sendPasswordReset(_email: string, token: string): Promise<void> {
     this.verificationTokens.push(token);
   }
 }
@@ -20,19 +29,37 @@ describe('email authentication', () => {
   it('requires verified email before login and rotates refresh tokens', async () => {
     const mailer = new TestMailer();
     const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}` });
+    const email = `alice-${randomUUID()}@example.com`;
 
-    const registered = await auth.register(' Alice@Example.com ', 'correct horse battery staple');
-    await expect(auth.login('alice@example.com', 'correct horse battery staple')).rejects.toMatchObject({
-      code: 'EMAIL_NOT_VERIFIED',
-    });
-
-    await auth.verifyEmail(mailer.verificationTokens[0]);
-    const firstSession = await auth.login('ALICE@example.com', 'correct horse battery staple');
+    await auth.requestRegistrationCode(` ${email.toUpperCase()} `);
+    const registered = await auth.register(` ${email.toUpperCase()} `, 'correct horse battery staple', 'Alice', mailer.registrationCodes[0]);
+    const firstSession = await auth.login(email.toUpperCase(), 'correct horse battery staple');
     const secondSession = await auth.refresh(firstSession.refreshToken);
 
-    expect(registered.email).toBe('alice@example.com');
+    expect(registered.email).toBe(email);
     expect(secondSession.refreshToken).not.toBe(firstSession.refreshToken);
     await expect(auth.refresh(firstSession.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+
+    await sqlClient`delete from users where id = ${registered.id}`;
+  });
+
+  it('renews the default refresh session for 30 days after each use', async () => {
+    const mailer = new TestMailer();
+    let now = new Date('2026-10-02T00:00:00.000Z');
+    const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}`, now: () => now });
+    const email = `sliding-${randomUUID()}@example.com`;
+
+    await auth.requestRegistrationCode(email);
+    const registered = await auth.register(email, 'a secure password', 'Sliding User', mailer.registrationCodes.at(-1)!);
+    const initialSession = await auth.login(email, 'a secure password');
+    expect(initialSession.refreshExpiresInSeconds).toBe(30 * 24 * 60 * 60);
+
+    now = new Date(now.getTime() + 29 * 24 * 60 * 60 * 1000);
+    const renewedSession = await auth.refresh(initialSession.refreshToken);
+    expect(renewedSession.refreshExpiresInSeconds).toBe(30 * 24 * 60 * 60);
+
+    now = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    await expect(auth.refresh(renewedSession.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
 
     await sqlClient`delete from users where id = ${registered.id}`;
   });
@@ -41,8 +68,10 @@ describe('email authentication', () => {
     const mailer = new TestMailer();
     const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}` });
 
-    const registered = await auth.register(`duplicate-${randomUUID()}@example.com`, 'a secure password');
-    await expect(auth.register(` ${registered.email.toUpperCase()} `, 'another secure password')).rejects.toMatchObject({
+    const email = `duplicate-${randomUUID()}@example.com`;
+    await auth.requestRegistrationCode(email);
+    const registered = await auth.register(email, 'a secure password', 'Duplicate', mailer.registrationCodes[0]);
+    await expect(auth.register(` ${registered.email.toUpperCase()} `, 'another secure password', 'Duplicate', mailer.registrationCodes[0])).rejects.toMatchObject({
       code: 'EMAIL_ALREADY_REGISTERED',
     });
     await sqlClient`delete from users where id = ${registered.id}`;
@@ -51,14 +80,68 @@ describe('email authentication', () => {
   it('exchanges an approved device code for a session', async () => {
     const mailer = new TestMailer();
     const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}` });
-    const registered = await auth.register(`device-${randomUUID()}@example.com`, 'a secure password');
-    await auth.verifyEmail(mailer.verificationTokens.at(-1)!);
+    const email = `device-${randomUUID()}@example.com`;
+    await auth.requestRegistrationCode(email);
+    const registered = await auth.register(email, 'a secure password', 'Device User', mailer.registrationCodes.at(-1)!);
 
     const device = await auth.startDeviceAuthorization();
     await auth.approveDevice(device.userCode, registered.id);
     const session = await auth.exchangeDevice(device.deviceCode);
 
     expect(session.accessToken).toEqual(expect.any(String));
+    await expect(auth.exchangeDevice(device.deviceCode)).rejects.toMatchObject({ code: 'DEVICE_AUTHORIZATION_PENDING' });
     await sqlClient`delete from users where id = ${registered.id}`;
+  });
+
+  it('updates a user display name without changing the email', async () => {
+    const mailer = new TestMailer();
+    const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}` });
+    const email = `profile-${randomUUID()}@example.com`;
+    await auth.requestRegistrationCode(email);
+    const registered = await auth.register(email, 'a secure password', 'Profile User', mailer.registrationCodes.at(-1)!);
+    const updated = await auth.updateProfile(registered.id, '项目负责人');
+
+    expect(updated).toMatchObject({ id: registered.id, email: registered.email, displayName: '项目负责人' });
+    await sqlClient`delete from users where id = ${registered.id}`;
+  });
+
+  it('allows direct verified registration when email verification is disabled', async () => {
+    const mailer = new TestMailer();
+    const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}`, emailVerificationRequired: false });
+    const email = `direct-${randomUUID()}@example.com`;
+    const registered = await auth.register(email, 'a secure password', 'Direct User');
+    const session = await auth.login(email, 'a secure password');
+    expect(session.accessToken).toEqual(expect.any(String));
+    expect(registered.email).toBe(email);
+    expect(mailer.registrationCodes).toHaveLength(0);
+    await sqlClient`delete from users where id = ${registered.id}`;
+  });
+
+  it('atomically rotates a refresh token once and reports the configured access TTL', async () => {
+    const auth = new AuthService(db, new TestMailer(), { accessSecret: 'rotation-test', emailVerificationRequired: false, accessTokenTtl: '2s' });
+    const email = `${randomUUID()}@example.com`;
+    const user = await auth.register(email, 'a secure password', 'Refresh');
+    try {
+      const session = await auth.login(email, 'a secure password');
+      expect(session.expiresInSeconds).toBe(2);
+      const results = await Promise.allSettled([auth.refresh(session.refreshToken), auth.refresh(session.refreshToken)]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    } finally { await sqlClient`delete from users where id=${user.id}`; }
+  });
+
+  it('resets a password with a one-time token and revokes existing sessions', async () => {
+    const mailer = new TestMailer();
+    const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}`, emailVerificationRequired: false });
+    const email = `reset-${randomUUID()}@example.com`;
+    const user = await auth.register(email, 'old secure password', 'Reset User');
+    const session = await auth.login(email, 'old secure password');
+    await auth.requestPasswordReset(email);
+    const token = mailer.verificationTokens.at(-1)!;
+    await auth.resetPassword(token, 'new secure password');
+    await expect(auth.login(email, 'old secure password')).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    await expect(auth.login(email, 'new secure password')).resolves.toEqual(expect.objectContaining({ accessToken: expect.any(String) }));
+    await expect(auth.refresh(session.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+    await expect(auth.resetPassword(token, 'another password')).rejects.toMatchObject({ code: 'INVALID_PASSWORD_RESET_TOKEN' });
+    await sqlClient`delete from users where id = ${user.id}`;
   });
 });

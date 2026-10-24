@@ -1,0 +1,94 @@
+import { createSign, createVerify } from 'node:crypto';
+import { BillingProviderError, type BillingProvider, type PaymentOrderInput, type PaymentRequest, type VerifiedNotification } from './types.js';
+
+type AlipayOptions = {
+  appId: string;
+  privateKey: string;
+  publicKey: string;
+  gateway: string;
+  sellerId?: string;
+};
+
+function canonicalize(payload: Record<string, string>): string {
+  return Object.keys(payload)
+    .filter((key) => key !== 'sign' && key !== 'sign_type' && payload[key] !== '' && payload[key] !== undefined)
+    .sort()
+    .map((key) => `${key}=${payload[key]}`)
+    .join('&');
+}
+
+function amountToString(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+export class AlipayProvider implements BillingProvider {
+  readonly name = 'alipay';
+
+  constructor(private readonly options: AlipayOptions) {
+    if (!options.appId || !options.privateKey || !options.publicKey || !options.gateway) {
+      throw new BillingProviderError('PAYMENT_CONFIGURATION_INVALID', 'Alipay payment configuration is incomplete.');
+    }
+  }
+
+  async createPayment(input: PaymentOrderInput): Promise<PaymentRequest> {
+    const fields: Record<string, string> = {
+      app_id: this.options.appId,
+      method: 'alipay.trade.page.pay',
+      format: 'JSON',
+      charset: 'utf-8',
+      sign_type: 'RSA2',
+      timestamp: new Date().toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ''),
+      version: '1.0',
+      notify_url: input.notifyUrl,
+      return_url: input.returnUrl,
+      biz_content: JSON.stringify({
+        out_trade_no: input.orderNo,
+        product_code: 'FAST_INSTANT_TRADE_PAY',
+        total_amount: amountToString(input.amountCents),
+        subject: input.subject,
+      }),
+    };
+    const content = canonicalize(fields);
+    const signer = createSign('RSA-SHA256');
+    signer.update(content);
+    fields.sign = signer.sign(this.options.privateKey, 'base64');
+    return { provider: this.name, orderNo: input.orderNo, formAction: this.options.gateway, formFields: fields };
+  }
+
+  verifyNotification(payload: Record<string, string>): VerifiedNotification {
+    const sign = payload.sign;
+    const content = canonicalize(payload);
+    const verifier = createVerify('RSA-SHA256');
+    verifier.update(content);
+    if (!sign || !verifier.verify(this.options.publicKey, sign, 'base64')) {
+      throw new BillingProviderError('PAYMENT_VERIFICATION_FAILED', 'Alipay notification signature is invalid.');
+    }
+    if (payload.app_id !== this.options.appId || (this.options.sellerId && payload.seller_id !== this.options.sellerId)) {
+      throw new BillingProviderError('PAYMENT_VERIFICATION_FAILED', 'Alipay notification merchant does not match.');
+    }
+    if (!payload.out_trade_no?.trim() || !payload.trade_no?.trim() || !payload.trade_status?.trim()) {
+      throw new BillingProviderError('PAYMENT_VERIFICATION_FAILED', 'Alipay required payment fields are missing.');
+    }
+    const amount = Number(payload.total_amount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new BillingProviderError('PAYMENT_VERIFICATION_FAILED', 'Alipay notification amount is invalid.');
+    }
+    return {
+      orderNo: payload.out_trade_no,
+      providerTransactionId: payload.trade_no,
+      amountCents: Math.round(amount * 100),
+      tradeStatus: payload.trade_status,
+      notificationId: payload.notify_id,
+    };
+  }
+}
+
+export function createAlipayProviderFromEnv(): AlipayProvider {
+  return new AlipayProvider({
+    appId: process.env.ALIPAY_APP_ID ?? '',
+    privateKey: process.env.ALIPAY_PRIVATE_KEY ?? '',
+    publicKey: process.env.ALIPAY_PUBLIC_KEY ?? '',
+    gateway: process.env.ALIPAY_GATEWAY ?? 'https://openapi.alipay.com/gateway.do',
+    sellerId: process.env.ALIPAY_SELLER_ID || undefined,
+  });
+}

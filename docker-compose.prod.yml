@@ -8,33 +8,67 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - vibe-plan-prod-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vibe} -d ${POSTGRES_DB:-vibe_plan}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   api:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-vibe}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-vibe_plan}
       API_PORT: 4000
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
       AUTH_ACCESS_SECRET: ${AUTH_ACCESS_SECRET:?set AUTH_ACCESS_SECRET}
+      AUTH_ACCESS_TOKEN_TTL: ${AUTH_ACCESS_TOKEN_TTL:-30m}
+      AUTH_REFRESH_TOKEN_TTL: ${AUTH_REFRESH_TOKEN_TTL:-30d}
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-}
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-true}
       SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:?set SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?set SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-alipay}
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID:-}
+      ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY:-}
+      ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY:-}
+      ALIPAY_GATEWAY: ${ALIPAY_GATEWAY:-https://openapi.alipay.com/gateway.do}
+      ALIPAY_SELLER_ID: ${ALIPAY_SELLER_ID:-}
+      ALIPAY_NOTIFY_URL: ${ALIPAY_NOTIFY_URL:-https://vibeplan.szxinjin.cn/api/billing/alipay/notify}
+      ALIPAY_RETURN_URL: ${ALIPAY_RETURN_URL:-https://vibeplan.szxinjin.cn/organizations/ORGANIZATION_ID/billing/return}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   web:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      args:
+        VITE_APP_VERSION: ${APP_VERSION:-dev}
+        VITE_BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
     restart: unless-stopped
+    links:
+      - api
     ports:
       - "8080:80"
     depends_on:
-      - api
+      api:
+        condition: service_started
 
 volumes:
   vibe-plan-prod-postgres:

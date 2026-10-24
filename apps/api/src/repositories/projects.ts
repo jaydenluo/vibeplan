@@ -12,6 +12,7 @@ export async function listProjectsForUser(
       id: projects.id,
       name: projects.name,
       slug: projects.slug,
+      description: projects.description,
       repositoryUrl: projects.repositoryUrl,
       teamId: projects.teamId,
     })
