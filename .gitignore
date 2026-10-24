@@ -3,7 +3,16 @@ dist/
 .env
 .env.*
 !.env.example
+scripts/tencent-credentials.env
+.npmrc
+deploy/server/.env
+deploy/server/data/postgres/
 .vibe/cache/
+.vibe/batch.lock
+.vibe/*.state.json
+.vibe/*.json.runs/
 .vibe.backup/
 coverage/
+playwright-report/
+test-results/
 *.log

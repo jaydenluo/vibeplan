@@ -1,0 +1,62 @@
+<style>
+  .wb-intro { margin-bottom: 18px; }
+  .wb-intro p { color: #6b7f8c; margin: 6px 0 0; }
+  .wb-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .wb-option { cursor: pointer; }
+  .wb-option:hover { transform: translateY(-2px); }
+  .wb-caption { padding: 12px 14px 0; }
+  .wb-caption h3 { margin: 0 0 5px; }
+  .wb-caption p { margin: 0; color: #6b7f8c; font-size: 13px; line-height: 1.5; }
+  .mini-shell { background: #f5f7f8; border: 1px solid #dce5e9; border-radius: 12px; overflow: hidden; min-height: 390px; color: #243845; }
+  .mini-top { height: 42px; background: #fff; border-bottom: 1px solid #e1e8eb; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px; }
+  .mini-top strong { font-size: 15px; }
+  .mini-body { padding: 16px; }
+  .mini-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .mini-kpi { background: #fff; border: 1px solid #e1e8eb; border-radius: 8px; padding: 10px; }
+  .mini-kpi small { display: block; color: #738792; font-size: 10px; }
+  .mini-kpi b { display: block; margin-top: 5px; font-size: 20px; }
+  .mini-grid { display: grid; grid-template-columns: 1.3fr .7fr; gap: 10px; margin-top: 10px; }
+  .mini-panel { background: #fff; border: 1px solid #e1e8eb; border-radius: 8px; padding: 12px; }
+  .mini-panel h4 { margin: 0 0 10px; font-size: 12px; }
+  .mini-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid #edf1f2; font-size: 11px; }
+  .mini-row:first-of-type { border-top: 0; }
+  .bar { height: 5px; background: #e7eef0; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: #4d899b; border-radius: inherit; }
+  .risk { color: #c45f57; font-weight: 700; }
+  .mini-list { display: grid; gap: 7px; }
+  .mini-task { background: #f7fafb; border-left: 3px solid #6a9aa8; padding: 8px 9px; font-size: 11px; }
+  .mini-task strong { display: block; }
+  .mini-task small { color: #738792; }
+  .mini-empty { color: #8a9ba3; font-size: 11px; padding: 14px 0; }
+  @media (max-width: 760px) { .wb-options { grid-template-columns: 1fr; } .mini-kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+<div class="wb-intro">
+  <h2>工作台应该先回答什么？</h2>
+  <p>工作台的核心不是展示所有数据，而是让负责人 10 秒内知道：哪里需要处理、下一步做什么、项目是否健康。</p>
+</div>
+<div class="wb-options">
+  <div class="card wb-option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="wb-caption"><h3>A · 执行控制台（推荐）</h3><p>以风险和今日行动为主，适合每天打开后直接处理任务。</p></div>
+    <div class="card-image">
+      <div class="mini-shell">
+        <div class="mini-top"><strong>工作台</strong><span>当前组织 · 刷新</span></div>
+        <div class="mini-body">
+          <div class="mini-kpis"><div class="mini-kpi"><small>进行中</small><b>12</b></div><div class="mini-kpi"><small>待验收</small><b>4</b></div><div class="mini-kpi"><small>已阻塞</small><b class="risk">2</b></div><div class="mini-kpi"><small>已逾期</small><b class="risk">3</b></div></div>
+          <div class="mini-grid"><div class="mini-panel"><h4>项目健康度</h4><div class="mini-row"><span>CLI 工具升级<div class="bar"><span style="width:72%"></span></div></span><b>72%</b></div><div class="mini-row"><span>团队协作平台<div class="bar"><span style="width:48%"></span></div></span><b>48%</b></div><div class="mini-row"><span>支付接入<div class="bar"><span style="width:26%"></span></div></span><b class="risk">阻塞</b></div></div><div class="mini-panel"><h4>今天要处理</h4><div class="mini-list"><div class="mini-task"><strong>确认登录流程</strong><small>待验收 · 今天</small></div><div class="mini-task"><strong>补充 API 证据</strong><small>进行中 · 明天</small></div><div class="mini-task"><strong>解除数据库阻塞</strong><small class="risk">已阻塞</small></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card wb-option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="wb-caption"><h3>B · 项目驾驶舱</h3><p>以项目组合和趋势为主，适合管理者快速查看整体进展。</p></div>
+    <div class="card-image">
+      <div class="mini-shell">
+        <div class="mini-top"><strong>工作台</strong><span>本周 · 近 7 天</span></div>
+        <div class="mini-body">
+          <div class="mini-panel"><h4>项目组合</h4><div class="mini-row"><span>CLI 工具升级<div class="bar"><span style="width:72%"></span></div></span><b>72%</b></div><div class="mini-row"><span>团队协作平台<div class="bar"><span style="width:48%"></span></div></span><b>48%</b></div><div class="mini-row"><span>支付接入<div class="bar"><span style="width:26%"></span></div></span><b class="risk">26%</b></div></div>
+          <div class="mini-grid"><div class="mini-panel"><h4>完成趋势</h4><div class="mini-empty">▁ ▃ ▂ ▆ ▄ ▇ ▅<br>本周完成 18 项</div></div><div class="mini-panel"><h4>风险摘要</h4><div class="mini-list"><div class="mini-task"><strong class="risk">2 项阻塞</strong><small>需要立即处理</small></div><div class="mini-task"><strong>3 项逾期</strong><small>计划需要调整</small></div></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

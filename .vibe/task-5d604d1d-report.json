@@ -1,0 +1,65 @@
+{
+  "summary": "任务详细计划 Markdown 的现有实现已验证：计划正文可保存到任务、网页只读展示、daemon 可生成本地 .plan.md 镜像，相关 API、CLI、同步和 Web 测试均通过。",
+  "outcome": "success",
+  "changedFiles": [
+    ".vibe/task-5d604d1d-plan.md",
+    "apps/api/src/db/schema.ts",
+    "apps/api/src/db/migrate.ts",
+    "apps/api/src/app.ts",
+    "apps/api/src/modules/work-items/service.ts",
+    "apps/cli/src/commands/execution.ts",
+    "apps/cli/src/sync/task-mirror.ts",
+    "apps/web/src/workspace/ProjectManagementPage.tsx",
+    "apps/web/src/workspace/WorkItemCreateForm.tsx",
+    ".vibe/tasks/5d604d1d-10bd-4c34-af90-16a77f62ae55.plan.md"
+  ],
+  "tests": [
+    {
+      "command": "DATABASE_URL=postgres://root:9VGhfSIGR77@localhost:54320/vibe_plan pnpm exec vitest run apps/api/src/modules/work-items/work-items.test.ts apps/cli/src/commands/execution.test.ts apps/cli/src/sync/sync.test.ts apps/web/src/app.test.tsx",
+      "result": "passed: 4 files, 63 tests"
+    },
+    {
+      "command": "pnpm lint",
+      "result": "passed: workspace TypeScript noEmit checks"
+    },
+    {
+      "command": "pnpm build",
+      "result": "passed: web, API, CLI, core and templates builds"
+    },
+    {
+      "command": "ls .vibe/tasks/5d604d1d-10bd-4c34-af90-16a77f62ae55.plan.md",
+      "result": "passed: daemon mirror exists and contains uploaded Markdown"
+    }
+  ],
+  "commit": null,
+  "evidence": [],
+  "risks": [
+    "网页端计划正文按只读内容展示；直接编辑本地 .plan.md 不会上传，后续同步可能覆盖本地文件。",
+    "云端任务仍需项目成员依据验收标准进行最终验收。"
+  ],
+  "remainingIssues": [
+    "未自动执行 task:accept，等待用户或授权审核人验收。"
+  ],
+  "criterionResults": [
+    {
+      "acceptanceItemId": "legacy-1",
+      "result": "passed",
+      "evidence": []
+    },
+    {
+      "acceptanceItemId": "legacy-2",
+      "result": "passed",
+      "evidence": []
+    },
+    {
+      "acceptanceItemId": "legacy-3",
+      "result": "passed",
+      "evidence": []
+    },
+    {
+      "acceptanceItemId": "legacy-4",
+      "result": "passed",
+      "evidence": []
+    }
+  ]
+}

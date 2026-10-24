@@ -99,35 +99,35 @@ User -> Organization -> Team -> Project -> WorkItem
 网页端使用安全会话。CLI 使用设备授权流程：
 
 ```text
-vibe login --server URL
+vibeplan login --server URL
   -> CLI 生成一次性设备码
   -> 浏览器完成网页登录和授权
   -> CLI 获得短期 access token 和可撤销 refresh token
   -> Token 保存到操作系统 Keychain
 ```
 
-Token 不写入 Git、`.vibe` 或命令日志。建议 access token 短期有效，refresh token 可轮换和撤销。CLI 提供 `vibe whoami` 和 `vibe logout`。
+Token 不写入 Git、`.vibe` 或命令日志。建议 access token 短期有效，refresh token 可轮换和撤销。CLI 提供 `vibeplan whoami` 和 `vibeplan logout`。
 
 ## 6. 项目初始化和同步
 
 用户先登录，再绑定项目：
 
 ```bash
-vibe login --server https://vibe.example.com
-vibe org list
-vibe org use acme
-vibe team list
-vibe team use frontend
-vibe init --project-id proj_abc123
+vibeplan login --server https://vibe.example.com
+vibeplan org list
+vibeplan org use acme
+vibeplan team list
+vibeplan team use frontend
+vibeplan init --project-id proj_abc123
 ```
 
-`vibe init` 行为：
+`vibeplan init` 行为：
 
 - 本地不存在 `.vibe`：检查项目存在性和权限，然后拉取项目配置。
 - 本地已有同一项目：执行同步，不覆盖未提交内容。
 - 本地绑定其他项目：提示并拒绝，除非用户显式使用 `--force`。
 - `--force` 覆盖前保存 `.vibe.backup/<timestamp>/`。
-- 服务器项目不存在时默认报错；项目创建使用 `vibe project create` 或显式 `--create`。
+- 服务器项目不存在时默认报错；项目创建使用 `vibeplan project create` 或显式 `--create`。
 
 项目初始化生成或更新：
 
@@ -205,11 +205,11 @@ Superpowers 和 Codex 内置 Plan 负责当前工作流和执行步骤；服务�
 CLI 命令：
 
 ```bash
-vibe task list
-vibe task show T-001
-vibe task start T-001
-vibe task report T-001
-vibe check
+vibeplan task list
+vibeplan task show T-001
+vibeplan task start T-001
+vibeplan task report T-001
+vibeplan check
 ```
 
 ## 9. 实时同步
@@ -218,7 +218,7 @@ vibe check
 
 任务更新使用版本号或乐观锁：客户端提交旧版本时，服务器拒绝静默覆盖并返回冲突信息。评论和活动记录采用追加式事件，减少多人修改冲突。
 
-本地 CLI 可以提供可选的 `vibe daemon`，但默认只同步语义化任务事件，不监听每一次文件保存。
+本地 CLI 可以提供可选的 `vibeplan daemon`，但默认只同步语义化任务事件，不监听每一次文件保存。
 
 ## 10. Git 集成
 
@@ -228,9 +228,9 @@ Git 负责代码同步。任务与 Git 的关联使用约定提交信息：
 [T-001] implement email login
 ```
 
-服务器保存提交哈希、分支、作者和任务 ID。CLI 通过 `vibe task report` 上传工作摘要、修改文件、测试结果和当前 commit。
+服务器保存提交哈希、分支、作者和任务 ID。CLI 通过 `vibeplan task report` 上传工作摘要、修改文件、测试结果和当前 commit。
 
-代码关系图不保存完整源代码。用户本地执行 `vibe index`，生成文件、模块、测试、符号和任务关系摘要，再上传到服务器。服务器只保存图谱快照及其对应 commit。
+代码关系图不保存完整源代码。用户本地执行 `vibeplan index`，生成文件、模块、测试、符号和任务关系摘要，再上传到服务器。服务器只保存图谱快照及其对应 commit。
 
 ## 11. 代码关系图
 
@@ -252,7 +252,7 @@ Git 负责代码同步。任务与 Git 的关联使用约定提交信息：
 apps/
   api/       NestJS API、认证、权限、SSE/WebSocket
   web/       React/Vite 页面
-  cli/       vibe 命令行
+  cli/       vibeplan 命令行
 packages/
   core/      领域模型和状态转换
   schema/    Zod/JSON Schema 校验
@@ -293,11 +293,11 @@ packages/
 
 ### Phase 3：本地 CLI 和 Codex 工作流
 
-- `vibe login` 设备授权。
-- `vibe init --project-id`。
-- `vibe org/team/project` 上下文选择。
+- `vibeplan login` 设备授权。
+- `vibeplan init --project-id`。
+- `vibeplan org/team/project` 上下文选择。
 - `.vibe` 本地缓存和 `AGENTS.md` 模板。
-- `vibe task start/report/check/sync`。
+- `vibeplan task start/report/check/sync`。
 - Token Keychain 存储。
 
 验收：用户可以在本地打开 Codex，读取任务、修改代码、上传完成报告并保留 Git commit。
@@ -319,7 +319,7 @@ packages/
 - 数据库备份和恢复。
 - 审计日志和权限审查。
 - 离线缓存和重新连接。
-- 可选的 `vibe daemon`。
+- 可选的 `vibeplan daemon`。
 
 ## 14. 关键风险
 
@@ -339,7 +339,7 @@ packages/
   -> 创建项目并绑定 Git
   -> 创建并分配 T-001
   -> 成员在本地登录 CLI
-  -> vibe init --project-id ...
+  -> vibeplan init --project-id ...
   -> Codex 执行任务
   -> 上传测试结果和 commit
   -> 网页端实时看到状态和活动

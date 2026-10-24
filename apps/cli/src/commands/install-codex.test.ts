@@ -1,0 +1,32 @@
+import { mkdtempSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, it, vi } from 'vitest';
+import { codexSkillPath, installCodexSkill, inspectCodexSkill, managedSkillTemplate } from './install-codex.js';
+it('keeps frontmatter first and preserves user appendix during managed upgrades', () => {
+  const root = mkdtempSync(join(tmpdir(), 'vibe-skill-'));
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  const path = installCodexSkill(root);
+  expect(readFileSync(path, 'utf8')).toMatch(/^---\nname: vibe-plan/);
+  const custom = '\n## My team rules\nAlways ask Alice about deployment.\n';
+  writeFileSync(path, readFileSync(path, 'utf8') + custom);
+  expect(inspectCodexSkill(root).state).toBe('current');
+  writeFileSync(path, readFileSync(path, 'utf8').replace('# Vibe Plan workflow', '# Old managed workflow'));
+  expect(inspectCodexSkill(root).state).toBe('different');
+  installCodexSkill(root);
+  expect(readFileSync(path, 'utf8')).toContain(custom);
+  expect(readFileSync(path, 'utf8')).toContain('# Vibe Plan workflow');
+  expect(inspectCodexSkill(root)).toMatchObject({ state: 'current', templateVersion: expect.any(String) });
+  vi.restoreAllMocks();
+});
+it('backs up a differing unmarked legacy Skill only after explicit force', () => {
+  const root = mkdtempSync(join(tmpdir(), 'vibe-skill-'));
+  const path = installCodexSkill(root);
+  writeFileSync(path, 'Legacy user instructions');
+  expect(() => installCodexSkill(root)).toThrow('already exists with different content');
+  installCodexSkill(root, true);
+  const backup = readdirSync(join(path, '..')).find((name) => name.startsWith('SKILL.md.backup-'))!;
+  expect(readFileSync(join(path, '..', backup), 'utf8')).toBe('Legacy user instructions');
+  expect(readFileSync(path, 'utf8')).toBe(managedSkillTemplate());
+  expect(readFileSync(path, 'utf8')).not.toContain('Legacy user instructions');
+});

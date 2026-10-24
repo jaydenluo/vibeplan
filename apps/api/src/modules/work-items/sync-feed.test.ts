@@ -1,0 +1,46 @@
+import { randomUUID } from 'node:crypto';
+import { beforeAll, expect, it } from 'vitest';
+import { db, sqlClient } from '../../db/client.js';
+import { migrate } from '../../db/migrate.js';
+import { users } from '../../db/schema.js';
+import { AccessService } from '../access/service.js';
+import { WorkItemService } from './service.js';
+beforeAll(() => migrate());
+it('returns consistent snapshot, paginated updates, rolled back cursors and subtree tombstones', async () => {
+  const [user] = await db.insert(users).values({ email: `${randomUUID()}@example.com`, passwordHash: 'test' }).returning();
+  const access = new AccessService(db);
+  const org = await access.createOrganization(user.id, 'Sync');
+  try {
+    const team = await access.createTeam(user.id, org.id, 'Core');
+    const project = await access.createProject(user.id, team.id, 'Project');
+    const service = new WorkItemService(db);
+    const first = await service.create(user.id, project.id, { title: 'First', description: '', type: 'feature', status: 'backlog', priority: 'P2', acceptanceCriteria: [], dueDate: null, estimate: 1 });
+    const snapshot = await service.syncFeed(user.id, project.id);
+    expect(snapshot.mode).toBe('snapshot');
+    expect(snapshot.items).toHaveLength(1);
+    await expect(service.syncFeed(user.id, project.id, '999999')).rejects.toThrow('snapshot');
+    await expect(service.update(user.id, first.id, 9, { title: 'stale' })).rejects.toThrow();
+    expect((await service.syncFeed(user.id, project.id, snapshot.cursor)).changes).toHaveLength(0);
+    const updated = await service.update(user.id, first.id, first.version, { title: 'Renamed' });
+    await service.remove(user.id, first.id, updated.version);
+    const page = await service.syncFeed(user.id, project.id, snapshot.cursor, 1);
+    expect(page.hasMore).toBe(true);
+    expect(page.changes).toHaveLength(1);
+    const last = await service.syncFeed(user.id, project.id, page.cursor, 1);
+    expect(last.changes?.[0]).toMatchObject({ action: 'delete', id: first.id });
+    expect(last.hasMore).toBe(false);
+    const parent = await service.create(user.id, project.id, { title: 'Parent', description: '', type: 'feature', status: 'backlog', priority: 'P2', acceptanceCriteria: [], dueDate: null, estimate: 1 });
+    const child = await service.create(user.id, project.id, { title: 'Child', description: '', type: 'feature', status: 'backlog', priority: 'P2', acceptanceCriteria: [], dueDate: null, estimate: 1, parentId: parent.id });
+    const beforeDelete = await service.syncFeed(user.id, project.id);
+    await service.remove(user.id, child.id, child.version);
+    const afterDelete = await service.syncFeed(user.id, project.id, beforeDelete.cursor);
+    expect(afterDelete.changes.map((c) => [c.id, c.action])).toContainEqual([parent.id, 'upsert']);
+    await sqlClient`update project_sync_heads set minimum_cursor=sequence where project_id=${project.id}`;
+    await expect(service.syncFeed(user.id, project.id, beforeDelete.cursor)).rejects.toThrow('snapshot');
+    await sqlClient`update project_sync_heads set sequence=20999 where project_id=${project.id}`;
+    await service.update(user.id, parent.id, parent.version, { title: 'Compacted' });
+    const compacted = await sqlClient`select minimum_cursor::text from project_sync_heads where project_id=${project.id}`;
+    expect(compacted[0].minimum_cursor).toBe('11000');
+    await expect(service.syncFeed(user.id, project.id, beforeDelete.cursor)).rejects.toThrow('snapshot');
+  } finally { await sqlClient`delete from organizations where id=${org.id}`; await sqlClient`delete from users where id=${user.id}`; }
+});

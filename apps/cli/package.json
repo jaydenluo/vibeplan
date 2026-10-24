@@ -1,15 +1,24 @@
 {
-  "name": "@vibe/cli",
-  "private": true,
+  "name": "@vibeplan/cli",
+  "private": false,
+  "version": "0.1.9",
+  "description": "Vibe Plan CLI for AI-assisted project planning",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "bin": {
-    "vibe": "dist/index.js"
+    "vibeplan": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "rm -rf dist && tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@vibe/templates": "workspace:*",
+    "@vibeplan/templates": "workspace:*",
     "commander": "^13.1.0",
     "keytar": "^7.9.0",
     "yaml": "^2.7.0"

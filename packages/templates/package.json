@@ -1,9 +1,25 @@
 {
-  "name": "@vibe/templates",
-  "private": true,
+  "name": "@vibeplan/templates",
+  "private": false,
+  "version": "0.1.9",
+  "description": "Codex instructions and templates for Vibe Plan",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json" }
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json"
+  }
 }

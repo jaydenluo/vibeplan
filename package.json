@@ -4,11 +4,15 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --parallel --filter @vibe/api --filter @vibe/web dev",
+    "dev": "pnpm --parallel --filter @vibeplan/api --filter @vibeplan/web dev",
     "test": "vitest run",
-    "lint": "tsc --noEmit"
+    "test:e2e": "playwright test",
+    "verify:package": "bash scripts/verify-npm-package.sh",
+    "verify:release": "bash scripts/verify-release.sh",
+    "lint": "pnpm -r exec tsc --noEmit"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.10.5",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
