@@ -48,12 +48,12 @@ it('explains grace and read-only subscription states', async () => {
 });
 
 it('shows billing load failure through the global message center', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: { message: '账单服务暂时不可用。' } }) }));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'Billing service is temporarily unavailable.' } }) }));
   const messages: Array<{ text: string; tone: string }> = [];
   const onMessage = (event: Event) => messages.push((event as CustomEvent<{ text: string; tone: string }>).detail);
   window.addEventListener(messageEvent, onMessage);
   render(<BillingPage organizationId="org-1" organizationName="研发组织" />);
-  await waitFor(() => expect(messages).toContainEqual({ text: '账单服务暂时不可用。', tone: 'error' }));
+  await waitFor(() => expect(messages).toContainEqual({ text: '服务暂时不可用，请稍后重试。', tone: 'error' }));
   expect(screen.queryByRole('alert')).toBeNull();
   expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
   window.removeEventListener(messageEvent, onMessage);
