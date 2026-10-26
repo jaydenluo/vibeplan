@@ -4,6 +4,16 @@
 
 Vibe Plan is a self-hosted collaboration platform for AI-assisted development. It provides web-based project management and task collaboration, plus the `vibeplan` CLI for local Git projects.
 
+## Project screenshots
+
+<p align="center">
+  <img src="projects.png" alt="Project management" width="32%" />
+  <img src="projects2.png" alt="Task management" width="32%" />
+  <img src="projects3.png" alt="Project analytics and contributions" width="32%" />
+</p>
+
+Use online: [https://vibeplan.szxinjin.cn](https://vibeplan.szxinjin.cn) · Free forever for personal use.
+
 ## License
 
 This project may be used, modified, and privately deployed by individuals and organizations for personal or internal use. Commercial operation, sale, paid hosting, and commercial SaaS or managed services are prohibited. See [LICENSE](LICENSE) for the full terms. Contact the copyright holder for commercial licensing.

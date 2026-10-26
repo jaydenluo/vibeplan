@@ -18,6 +18,8 @@ Vibe Plan 是一个面向 AI 编程协作的任务管理平台。它把 Codex、
   <img src="projects3.png" alt="项目分析与贡献统计页面" width="32%" />
 </p>
 
+在线使用：[https://vibeplan.szxinjin.cn](https://vibeplan.szxinjin.cn) · 个人永久免费。
+
 ## 使用许可
 
 本项目允许个人和企业免费使用、修改及私有化部署，但禁止将本项目或其修改版本用于商业运营、商业销售、商业托管或商业 SaaS 服务。完整条款见 [LICENSE](LICENSE)；如需商业授权，请联系版权持有人。
