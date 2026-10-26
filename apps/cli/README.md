@@ -59,7 +59,7 @@ vibeplan login --server http://localhost:4000
 vibeplan login
 ```
 
-The command prints a clickable Vibe Plan web address and a one-time device code. Open that address, sign in, approve the code, and return to the terminal. The code is valid for 10 minutes and can be used once; run `vibeplan login` again when it expires or approval fails. The session is stored in the operating-system Keychain, not in the project or Git.
+The command prints the Vibe Plan web address and a one-time device code, then waits for Enter to open the page in your browser. You can also copy the address and open it manually. Sign in, approve the code, and return to the terminal. The code is valid for 10 minutes and can be used once; run `vibeplan login` again when it expires or approval fails. The session is stored in the operating-system Keychain, not in the project or Git.
 
 The default access token lasts 30 minutes and the refresh session lasts 90 days. The CLI automatically refreshes an expired access token and stores the replacement credentials in the operating-system Keychain. Each successful refresh renews the 90-day refresh window, so active users normally stay signed in. The server controls these values with `AUTH_ACCESS_TOKEN_TTL` and `AUTH_REFRESH_TOKEN_TTL`; the deployed server configuration is authoritative. Run `vibeplan login` again after the refresh window expires, `vibeplan logout`, credential revocation, or a server-side session reset. When `vibeplan start` runs in an interactive terminal with a missing or expired session, it shows `[1] Log in now  [2] Cancel`; after a successful device-code login it automatically continues starting the daemon. Scripts and the daemon only print the login command and never wait for input.
 

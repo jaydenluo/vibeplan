@@ -22,7 +22,7 @@ vibeplan login
 vibeplan init --project-id PROJECT_ID
 ```
 
-`login` 会打开设备授权页面，设备码 10 分钟内有效。登录凭据保存在操作系统 Keychain，不会写入仓库。`init` 会创建或更新 `.vibe/project.yaml`、`.vibe/tasks/`、`.vibe/cache/`、`.vibe/instructions.md` 和 `AGENTS.md`。
+`login` 会显示登录页面和一次性设备码，并提示按回车自动打开浏览器；也可以复制网址手动访问。设备码 10 分钟内有效。登录凭据保存在操作系统 Keychain，不会写入仓库。`init` 会创建或更新 `.vibe/project.yaml`、`.vibe/tasks/`、`.vibe/cache/`、`.vibe/instructions.md` 和 `AGENTS.md`。
 
 默认 access token 有效 30 分钟，refresh 会话有效 90 天；每次成功刷新都会重新获得 90 天。服务器通过 `AUTH_ACCESS_TOKEN_TTL` 和 `AUTH_REFRESH_TOKEN_TTL` 控制实际时长。密码重置、退出登录、服务器清理会话或本机 Keychain 条目被删除后，需要重新登录。
 
