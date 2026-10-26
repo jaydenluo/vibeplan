@@ -12,6 +12,8 @@ import {
 } from '../../db/schema.js';
 
 export interface Mailer {
+  isConfigured(): boolean;
+  assertConfigured(): void;
   sendRegistrationCode(email: string, code: string): Promise<void>;
   sendVerification(email: string, token: string): Promise<void>;
   sendPasswordReset(email: string, token: string): Promise<void>;
@@ -57,6 +59,10 @@ function createRegistrationCode(): string {
   return String(randomInt(100000, 1000000));
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === '23505';
+}
+
 export class AuthService {
   private readonly now: () => Date;
   private readonly accessSecret: Uint8Array;
@@ -80,7 +86,12 @@ export class AuthService {
     return this.emailVerificationRequired;
   }
 
+  isEmailDeliveryConfigured(): boolean {
+    return this.mailer.isConfigured();
+  }
+
   async requestRegistrationCode(email: string): Promise<{ expiresInSeconds: number }> {
+    this.mailer.assertConfigured();
     const normalizedEmail = normalizeEmail(email);
     const existing = await this.database.select({ id: users.id }).from(users).where(eq(users.email, normalizedEmail)).limit(1);
     if (existing.length > 0) {
@@ -146,10 +157,19 @@ export class AuthService {
       throw new AuthError('EMAIL_ALREADY_REGISTERED', 'Email is already registered.');
     }
 
-    const [user] = await this.database
-      .insert(users)
-      .values({ email, displayName, passwordHash: await argon2.hash(password), emailVerifiedAt: verified ? this.now() : null })
-      .returning({ id: users.id, email: users.email, displayName: users.displayName });
+    if (!verified) this.mailer.assertConfigured();
+
+    let user: { id: string; email: string; displayName: string | null } | undefined;
+    try {
+      [user] = await this.database
+        .insert(users)
+        .values({ email, displayName, passwordHash: await argon2.hash(password), emailVerifiedAt: verified ? this.now() : null })
+        .returning({ id: users.id, email: users.email, displayName: users.displayName });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new AuthError('EMAIL_ALREADY_REGISTERED', 'Email is already registered.');
+      throw error;
+    }
+    if (!user) throw new AuthError('USER_CREATION_FAILED', 'Unable to create user.');
 
     if (verified) return user;
 
@@ -289,6 +309,7 @@ export class AuthService {
   }
 
   async requestPasswordReset(email: string): Promise<void> {
+    this.mailer.assertConfigured();
     const normalizedEmail = normalizeEmail(email);
     const [user] = await this.database.select({ id: users.id, email: users.email }).from(users).where(eq(users.email, normalizedEmail)).limit(1);
     if (!user) return;

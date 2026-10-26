@@ -5,7 +5,7 @@ const timestamps = {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 };
 
-export type BillingPlanCode = 'free' | 'team_10' | 'team_30' | 'team_100' | 'enterprise_1000' | 'custom';
+export type BillingPlanCode = 'free' | 'personal' | 'team_10' | 'team_30' | 'team_100' | 'enterprise_1000' | 'custom';
 export type BillingSubscriptionStatus = 'active' | 'grace' | 'expired' | 'cancelled' | 'manual';
 export type BillingOrderStatus = 'pending' | 'paid' | 'scheduled' | 'closed' | 'refunded' | 'failed';
 export type PlatformAdminRole = 'super_admin' | 'operator';

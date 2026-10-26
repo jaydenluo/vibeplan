@@ -1,5 +1,7 @@
 # Vibe Plan 服务器部署包
 
+本项目允许个人或企业进行内部私有化部署，但不得用于对外商业运营、商业托管、商业 SaaS 或收费服务。完整条款见仓库根目录的 [LICENSE](../../LICENSE)。
+
 这个目录可以整体上传到服务器。服务器只需要安装 Docker Engine 和 Docker Compose Plugin，不需要 Node.js、pnpm 或源码。
 
 默认访问域名是 `https://vibeplan.szxinjin.cn`。请先在腾讯云 DNS 中添加 `A` 记录，将 `vibeplan.szxinjin.cn` 指向服务器公网 IP。服务器上的 Traefik 必须已经连接外部 Docker 网络 `traefik-public`，并使用你提供的 `myresolver` 证书解析器。
@@ -34,6 +36,8 @@ ALIPAY_RETURN_URL=https://vibeplan.szxinjin.cn/organizations/ORGANIZATION_ID/bil
 ```
 
 私钥和支付宝公钥只保存在服务器 `.env`，不能写入镜像、源码或浏览器配置。Traefik 将 `vibeplan.szxinjin.cn` 转到 Web Nginx，Nginx 再将 `/api/*` 转发到 API；因此支付宝异步通知地址无需额外配置第二个 API 域名。付款成功只以 API 对支付宝异步通知的签名与金额校验结果为准。首次上线请先通过支付宝沙箱完成下单、回调、重复回调和验签失败验证，再切换生产应用参数并执行 `./deploy.sh`。
+
+`./deploy.sh` 会在拉取镜像前检查这些生产支付配置；任一凭据为空，或生产网关不是 `https://openapi.alipay.com/gateway.do`，部署会直接停止，不会启动不完整的收款服务。支付宝应用私钥和公钥支持在 `.env` 中使用 `\\n` 表示换行。
 
 如果服务器之前使用旧版 Docker volume，第一次运行新版 `./deploy.sh` 时会自动停止当前服务，将旧 volume 复制到 `data/postgres/`，并保留旧 volume 作为备份。迁移完成后，数据库以部署目录下的文件为准。
 

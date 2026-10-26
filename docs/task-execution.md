@@ -56,7 +56,7 @@ Repair rejected work in the same task, retest and submit fresh evidence for the 
 
 ### 登录与同步
 
-同一个操作系统用户的终端和多个项目共享 Keychain 登录。Access token 默认有效 30 分钟，refresh 会话默认 30 天，每次成功续期重新计算有效期。超过期限未使用、退出登录、撤销凭据或清空服务端会话时需要重新登录。网络中断和服务器临时故障不会清除新版 CLI 的凭据。
+同一个操作系统用户的终端和多个项目共享 Keychain 登录。Access token 默认有效 30 分钟，refresh 会话默认 90 天，每次成功续期重新计算有效期。超过期限未使用、退出登录、撤销凭据或清空服务端会话时需要重新登录。网络中断和服务器临时故障不会清除新版 CLI 的凭据。
 
 CLI 续期必须由服务器返回新 access/refresh token；旧服务器如果只设置浏览器 Cookie，会导致 CLI 续期失败。请同时更新服务器 API 和 CLI。升级 CLI 后，在每个项目根目录运行 `vibeplan stop`，再运行 `vibeplan start`，以重启使用旧代码的后台。
 
@@ -136,7 +136,7 @@ vibeplan task:log-withdraw TASK_ID LOG_ID --log-version LOG_VERSION --reason "�
 
 ### Sessions and synchronization
 
-Terminals and projects under the same OS user share the Keychain session. Access tokens default to 30 minutes; refresh sessions default to 30 days and renew on successful refresh. Inactivity beyond expiry, logout, revocation or deletion of server sessions requires another login. Temporary network/server failures preserve credentials in the updated CLI.
+Terminals and projects under the same OS user share the Keychain session. Access tokens default to 30 minutes; refresh sessions default to 90 days and renew on successful refresh. Inactivity beyond expiry, logout, revocation or deletion of server sessions requires another login. Temporary network/server failures preserve credentials in the updated CLI.
 
 Native refresh responses must include the rotated access and refresh tokens. An older server returning only browser cookies cannot renew CLI credentials correctly: update both API and CLI. After upgrading, run `vibeplan stop` and `vibeplan start` in each project to restart its old daemon.
 

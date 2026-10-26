@@ -8,19 +8,23 @@ IMAGE_PLATFORMS="${IMAGE_PLATFORMS:-linux/amd64}"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/build-and-push-tencent.sh <X.Y.Z> [--publish-npm]
+Usage: scripts/build-and-push-tencent.sh [X.Y.Z] [--publish-npm]
 
 Builds and pushes the Vibe Plan API and Web images with both the release
 version and latest tags. Credentials are read from
 scripts/tencent-credentials.env or TENCENT_CREDENTIALS_FILE.
 
 Example:
+  scripts/build-and-push-tencent.sh
   scripts/build-and-push-tencent.sh 0.1.0
   scripts/build-and-push-tencent.sh 0.1.0 --publish-npm
+
+When the version is omitted, the patch component is incremented from the
+matching versions in both package.json files.
 EOF
 }
 
-is_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+is_semver() { [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; }
 
 read_credential_value() {
   local name="$1"
@@ -35,20 +39,30 @@ require_var() {
   fi
 }
 
-if [[ $# -lt 1 || $# -gt 2 ]] || ! is_semver "$1"; then
-  usage >&2
-  exit 1
+if [[ $# -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  usage
+  exit 0
 fi
 
-IMAGE_VERSION="$1"
+IMAGE_VERSION=""
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  IMAGE_VERSION="$1"
+  shift
+  if ! is_semver "$IMAGE_VERSION"; then
+    echo "ERROR: release version must use X.Y.Z: $IMAGE_VERSION" >&2
+    exit 1
+  fi
+fi
 publish_npm=false
-if [[ "${2:-}" == "--publish-npm" ]]; then
+if [[ "${1:-}" == "--publish-npm" ]]; then
   publish_npm=true
-elif [[ $# -eq 2 ]]; then
+  shift
+elif [[ $# -gt 0 ]]; then
   usage >&2
   exit 1
 fi
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root_dir"
 credentials_file="${TENCENT_CREDENTIALS_FILE:-$root_dir/scripts/tencent-credentials.env}"
 if [[ ! -f "$credentials_file" ]]; then
   echo "ERROR: missing $credentials_file. Copy scripts/tencent-credentials.env.example and configure it first." >&2
@@ -59,6 +73,34 @@ TENCENT_CCR_USERNAME="${TENCENT_CCR_USERNAME:-$(read_credential_value TENCENT_CC
 TENCENT_CCR_PASSWORD="${TENCENT_CCR_PASSWORD:-$(read_credential_value TENCENT_CCR_PASSWORD)}"
 require_var TENCENT_CCR_USERNAME
 require_var TENCENT_CCR_PASSWORD
+
+IMAGE_VERSION=$(node - "$IMAGE_VERSION" <<'NODE'
+const fs = require('node:fs');
+const files = ['packages/templates/package.json', 'apps/cli/package.json'];
+const packages = files.map((file) => ({ file, data: JSON.parse(fs.readFileSync(file, 'utf8')) }));
+const requested = process.argv[2] || '';
+const current = packages.map(({ data }) => data.version);
+const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+if (current.some((value) => !semver.test(value))) {
+  throw new Error(`package versions must use X.Y.Z: ${current.join(', ')}`);
+}
+let version = requested;
+if (!version) {
+  if (current[0] !== current[1]) {
+    throw new Error(`package versions must match before automatic increment: ${current.join(', ')}`);
+  }
+  const [major, minor, patch] = current[0].split('.').map(Number);
+  version = `${major}.${minor}.${patch + 1}`;
+}
+if (!semver.test(version)) throw new Error(`release version must use X.Y.Z: ${version}`);
+for (const { file, data } of packages) {
+  data.version = version;
+  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+}
+process.stdout.write(version);
+NODE
+)
+echo "Preparing image release $IMAGE_VERSION."
 
 image_ref() { printf '%s/%s/%s:%s' "$REGISTRY" "$TENCENT_CCR_NAMESPACE" "$1" "$IMAGE_VERSION"; }
 latest_ref() { printf '%s/%s/%s:latest' "$REGISTRY" "$TENCENT_CCR_NAMESPACE" "$1"; }

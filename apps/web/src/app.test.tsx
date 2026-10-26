@@ -13,7 +13,7 @@ import { RegisterPage } from './auth/RegisterPage.js';
 import { messageEvent } from './api/client.js';
 
 describe('web app', () => {
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); window.history.replaceState({}, '', '/'); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); localStorage.clear(); sessionStorage.clear(); window.history.replaceState({}, '', '/'); });
 
   it('shows the login entry point before authentication', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: { message: 'Access token is required.' } }) }));
@@ -50,6 +50,96 @@ describe('web app', () => {
     await waitFor(() => expect(screen.queryByLabelText('邮箱验证码')).toBeNull());
     fireEvent.click(screen.getByRole('button', { name: '注册' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/auth\/register$/), expect.objectContaining({ body: JSON.stringify({ email: 'wang@example.com', password: 'correct horse battery staple', displayName: '王明' }) })));
+  });
+
+  it('disables registration-code sending when email delivery is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ emailVerificationRequired: true, emailDeliveryConfigured: false }) }));
+    render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+
+    expect(await screen.findByText('邮件服务尚未配置，请联系管理员。')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '获取验证码' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('explains that a registration code must be requested instead of disabling registration', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ emailVerificationRequired: true, emailDeliveryConfigured: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('姓名'), { target: { value: '王明' } });
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'wang@example.com' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'correct horse battery staple' } });
+    fireEvent.click(screen.getByRole('button', { name: '注册' }));
+
+    expect(await screen.findByText('请先获取邮箱验证码')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '注册' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringMatching(/\/auth\/register$/), expect.anything());
+  });
+
+  it('submits an entered six-digit code even when this page did not send it', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () => url.endsWith('/auth/config')
+        ? { emailVerificationRequired: true, emailDeliveryConfigured: true }
+        : {},
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('姓名'), { target: { value: '王明' } });
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'wang@example.com' } });
+    fireEvent.change(screen.getByLabelText('邮箱验证码'), { target: { value: '725051' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'correct horse battery staple' } });
+    fireEvent.click(screen.getByRole('button', { name: '注册' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/auth\/register$/), expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ email: 'wang@example.com', password: 'correct horse battery staple', displayName: '王明', verificationCode: '725051' }),
+    })));
+  });
+
+  it('shows Chinese field errors without sending an incomplete registration', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ emailVerificationRequired: true, emailDeliveryConfigured: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '注册' }));
+
+    expect(await screen.findByText('请输入姓名')).toBeTruthy();
+    expect(screen.getByText('请输入有效的邮箱地址')).toBeTruthy();
+    expect(screen.getByText('请先获取邮箱验证码')).toBeTruthy();
+    expect(screen.getByText('密码至少需要 8 位')).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringMatching(/\/auth\/register$/), expect.anything());
+  });
+
+  it('starts and restores a 30-second registration-code resend cooldown', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ emailVerificationRequired: true, emailDeliveryConfigured: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const first = render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'member@example.com' } });
+    expect((screen.getByRole('button', { name: '获取验证码' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '获取验证码' }));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: '30 秒后重新发送' })).toBeTruthy());
+    expect((screen.getByRole('button', { name: '30 秒后重新发送' }) as HTMLButtonElement).disabled).toBe(true);
+
+    first.unmount();
+    render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'member@example.com' } });
+    expect(await screen.findByRole('button', { name: '30 秒后重新发送' })).toBeTruthy();
+  });
+
+  it('keeps registration-code cooldown isolated per email address', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ emailVerificationRequired: true, emailDeliveryConfigured: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RegisterPage onRegistered={vi.fn()} onLogin={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'first@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: '获取验证码' }));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: '30 秒后重新发送' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'second@example.com' } });
+    expect(screen.getByRole('button', { name: '获取验证码' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: '获取验证码' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('creates a task with the standard planning fields', async () => {

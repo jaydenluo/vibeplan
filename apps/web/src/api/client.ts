@@ -10,6 +10,8 @@ const webErrorMessages: Record<string, string> = {
   EMAIL_ALREADY_REGISTERED: '该邮箱已注册，请直接登录。',
   EMAIL_NOT_VERIFIED: '邮箱尚未验证，请完成验证后再登录。',
   EMAIL_VERIFICATION_REQUIRED: '请先完成邮箱验证。',
+  EMAIL_DELIVERY_NOT_CONFIGURED: '邮件服务尚未配置，请联系管理员。',
+  EMAIL_DELIVERY_FAILED: '邮件发送失败，请稍后重试或联系管理员。',
   INVALID_REGISTRATION_CODE: '验证码无效或已过期，请重新获取。',
   INVALID_EMAIL_TOKEN: '邮箱验证链接无效或已过期，请重新获取。',
   INVALID_PASSWORD_RESET_TOKEN: '密码重置链接无效或已过期，请重新获取。',
@@ -37,6 +39,7 @@ const webErrorMessages: Record<string, string> = {
   BILLING_PLAN_NOT_PURCHASABLE: '该套餐需要联系 VibePlan 开通。',
   BILLING_ORDER_NOT_FOUND: '订单不存在或已无法访问。',
   BILLING_ORDER_NOT_PAYABLE: '该订单当前无法继续支付。',
+  BILLING_PENDING_ORDER_EXISTS: '已有未付款订单，请先完成当前订单后再选择其他套餐。',
   PAYMENT_CONFIGURATION_INVALID: '支付配置不完整，请联系管理员。',
   PAYMENT_PROVIDER_MISMATCH: '支付方式与订单不匹配，请重新创建订单。',
   PAYMENT_PROVIDER_NOT_AVAILABLE: '当前支付方式暂不可用，请稍后重试。',
@@ -136,7 +139,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, allowR
 
 export { apiBase };
 
-export type BillingPlanCode = 'free' | 'team_10' | 'team_30' | 'team_100' | 'enterprise_1000' | 'custom';
+export type BillingPlanCode = 'free' | 'personal' | 'team_10' | 'team_30' | 'team_100' | 'enterprise_1000' | 'custom';
 export type BillingSubscriptionStatus = 'free' | 'active' | 'grace' | 'expired' | 'scheduled_change' | 'manual';
 export type BillingOrderStatus = 'pending' | 'paid' | 'scheduled' | 'closed' | 'failed' | 'refunded';
 
@@ -165,6 +168,7 @@ export type BillingSummary = {
     denialReason?: string | null;
   };
   orders: BillingOrder[];
+  payment?: { provider: string; available: boolean; testMode: boolean };
 };
 
 export type BillingOrder = {
@@ -204,6 +208,10 @@ export function getBillingOrder(organizationId: string, orderId: string) {
 
 export function confirmManualBillingOrder(organizationId: string, orderId: string) {
   return apiRequest<BillingOrder>(`/organizations/${organizationId}/billing/orders/${orderId}/confirm`, { method: 'POST', body: '{}' });
+}
+
+export function resumeBillingPayment(organizationId: string, orderId: string) {
+  return apiRequest<BillingOrderResponse>(`/organizations/${organizationId}/billing/orders/${orderId}/pay`, { method: 'POST', body: '{}' });
 }
 
 export type PlatformAdminRole = 'super_admin' | 'operator';

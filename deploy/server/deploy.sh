@@ -26,6 +26,26 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Never start a production stack with an incomplete payment configuration.
+# Keep the values out of logs; only report the missing variable names.
+billing_provider="$(awk -F= '$1 == "BILLING_PROVIDER" { print $2; exit }' .env | tr -d '\r' | xargs)"
+if [[ "${billing_provider:-alipay}" == "alipay" ]]; then
+  missing_billing=()
+  for variable in ALIPAY_APP_ID ALIPAY_PRIVATE_KEY ALIPAY_PUBLIC_KEY ALIPAY_SELLER_ID ALIPAY_NOTIFY_URL ALIPAY_RETURN_URL; do
+    value="$(awk -F= -v key="$variable" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' .env | tr -d '\r')"
+    if [[ -z "${value//[[:space:]]/}" ]]; then missing_billing+=("$variable"); fi
+  done
+  if ((${#missing_billing[@]} > 0)); then
+    echo "ERROR: Alipay production payment is not configured. Fill these server .env variables: ${missing_billing[*]}" >&2
+    exit 1
+  fi
+  gateway="$(awk -F= '$1 == "ALIPAY_GATEWAY" { print $2; exit }' .env | tr -d '\r' | xargs)"
+  if [[ "${gateway:-https://openapi.alipay.com/gateway.do}" != "https://openapi.alipay.com/gateway.do" ]]; then
+    echo "ERROR: Production ALIPAY_GATEWAY must be https://openapi.alipay.com/gateway.do." >&2
+    exit 1
+  fi
+fi
+
 # PostgreSQL is stored inside this deployment directory. On the first run
 # after upgrading from the old named volume, copy that volume before startup.
 mkdir -p "$data_dir"

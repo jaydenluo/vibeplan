@@ -22,13 +22,17 @@ describe('EntitlementService', () => {
     const [firstTeam] = await db.insert(teams).values({ organizationId: firstOrganization.id, name: 'First', slug: `first-team-${suffix}` }).returning();
     const [secondTeam] = await db.insert(teams).values({ organizationId: secondOrganization.id, name: 'Second', slug: `second-team-${suffix}` }).returning();
     await db.insert(projects).values([
-      ...Array.from({ length: 9 }, (_, index) => ({ teamId: firstTeam.id, name: `Project ${index}`, slug: `first-project-${index}-${suffix}` })),
-      { teamId: secondTeam.id, name: 'Project 10', slug: `second-project-${suffix}` },
+      ...Array.from({ length: 49 }, (_, index) => ({ teamId: firstTeam.id, name: `Project ${index}`, slug: `first-project-${index}-${suffix}` })),
     ]);
 
-    const policy = await new EntitlementService(db).getOrganizationPolicy(secondOrganization.id);
-
-    expect(policy.projectUsage).toEqual({ used: 10, limit: 10 });
+    const service = new EntitlementService(db);
+    const beforeLimit = await service.getOrganizationPolicy(secondOrganization.id);
+    expect(beforeLimit.projectUsage).toEqual({ used: 49, limit: 50 });
+    expect(beforeLimit.canCreateProject).toBe(true);
+    expect((await new EntitlementService(db, () => new Date('2099-01-01T00:00:00Z')).getOrganizationPolicy(secondOrganization.id)).canWrite).toBe(true);
+    await db.insert(projects).values({ teamId: secondTeam.id, name: 'Project 50', slug: `second-project-${suffix}` });
+    const policy = await service.getOrganizationPolicy(secondOrganization.id);
+    expect(policy.projectUsage).toEqual({ used: 50, limit: 50 });
     expect(policy.canCreateProject).toBe(false);
     await sqlClient`delete from users where id = ${owner.id}`;
   });

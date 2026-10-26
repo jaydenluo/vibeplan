@@ -8,6 +8,7 @@ import {
   createBillingOrder,
   getBillingOrder,
   getBillingSummary,
+  resumeBillingPayment,
   showMessage,
 } from '../api/client.js';
 
@@ -20,7 +21,8 @@ type Props = {
 type Plan = { code: BillingPlanCode; name: string; priceCents: number | null; memberLimit: number | null; description: string };
 
 const plans: Plan[] = [
-  { code: 'free', name: '个人免费', priceCents: 0, memberLimit: 1, description: '个人使用，免费组织合计最多 10 个项目。' },
+  { code: 'free', name: '个人免费', priceCents: 0, memberLimit: 1, description: '个人使用，免费组织合计最多 50 个项目。' },
+  { code: 'personal', name: '个人版', priceCents: 12_800, memberLimit: 1, description: '个人使用，项目数量不限。' },
   { code: 'team_10', name: '团队 10 人', priceCents: 48_000, memberLimit: 10, description: '适合小型协作团队，项目数量不限。' },
   { code: 'team_30', name: '团队 30 人', priceCents: 128_000, memberLimit: 30, description: '适合稳定的研发与产品协作。' },
   { code: 'team_100', name: '团队 100 人', priceCents: 368_000, memberLimit: 100, description: '适合多团队协作与跨项目管理。' },
@@ -70,6 +72,7 @@ export function BillingPage({ organizationId, organizationName, onBack }: Props)
   const [pendingOrder, setPendingOrder] = useState<BillingOrder | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [paymentBusy, setPaymentBusy] = useState(false);
 
   const loadSummary = useCallback(async () => {
     setLoading(true);
@@ -85,6 +88,12 @@ export function BillingPage({ organizationId, organizationName, onBack }: Props)
   }, [organizationId]);
 
   useEffect(() => { void loadSummary(); }, [loadSummary]);
+
+  useEffect(() => {
+    if (!summary || pendingOrder) return;
+    const existing = summary.orders.find((order) => order.status === 'pending');
+    if (existing) setPendingOrder(existing);
+  }, [pendingOrder, summary]);
 
   useEffect(() => {
     if (!pendingOrder || pendingOrder.status !== 'pending') return;
@@ -124,13 +133,22 @@ export function BillingPage({ organizationId, organizationName, onBack }: Props)
     } catch { /* The request client has shown the failure. */ }
   }
 
+  async function resumePayment() {
+    if (!pendingOrder || paymentBusy) return;
+    setPaymentBusy(true);
+    try {
+      const order = await resumeBillingPayment(organizationId, pendingOrder.id);
+      setPendingOrder(order);
+      if (order.payment?.provider === 'alipay') submitPayment(order.payment);
+    } finally { setPaymentBusy(false); }
+  }
+
   if (loading && !summary) return <section className="billing-page"><p className="muted">正在加载订阅与账单…</p></section>;
   if (!summary) return <section className="billing-page"><p className="muted">{loadFailed ? '暂无可显示的订阅信息。' : '正在加载订阅与账单…'}</p><button className="secondary" type="button" onClick={() => void loadSummary()}>重试</button></section>;
 
   const { subscription, policy } = summary;
   const currentPlan = planByCode.get(subscription.planCode) ?? plans[0];
   const canManageBilling = summary.role === 'owner' && policy.canManageBilling;
-  const currentIndex = plans.findIndex((plan) => plan.code === currentPlan.code);
   const warning = !policy.canWriteOrganization
     ? policy.denialReason || '订阅已过宽限期，组织现在为只读状态。'
     : subscription.status === 'grace'
@@ -139,11 +157,12 @@ export function BillingPage({ organizationId, organizationName, onBack }: Props)
 
   return <section className="management-page billing-page">
     <header className="page-heading">
-      <div><p className="eyebrow">组织设置</p><h2>订阅与账单</h2><p className="muted">{organizationName} 的年度订阅、成员额度与付款记录。</p></div>
+      <div><p className="eyebrow">组织设置</p><h2>订阅与账单</h2><p className="muted">{organizationName} 的订阅、成员额度与付款记录。</p></div>
       <div className="page-actions">{onBack && <button className="secondary" type="button" onClick={onBack}>返回团队</button>}<button className="secondary" type="button" onClick={() => void loadSummary()}>刷新</button></div>
     </header>
     {warning && <p className={`billing-banner ${policy.canWriteOrganization ? 'warning' : 'read-only'}`} role="alert">{warning}</p>}
     {!canManageBilling && <p className="billing-notice">只有组织所有者可以管理订阅与账单。</p>}
+    {canManageBilling && summary.payment && !summary.payment.available && <p className="billing-notice">在线支付暂未开通，请联系管理员。</p>}
 
     <section className="billing-current" aria-label="当前订阅">
       <div><span>当前套餐</span><strong>{currentPlan.name}</strong><small>{subscription.status === 'grace' ? '宽限期内' : subscription.status === 'expired' ? '只读' : '有效'}</small></div>
@@ -152,15 +171,16 @@ export function BillingPage({ organizationId, organizationName, onBack }: Props)
       <div><span>到期日期</span><strong>{subscription.planCode === 'free' ? '长期免费' : formatDate(subscription.periodEndsAt)}</strong>{subscription.scheduledPlanCode && <small>下次续费将使用 {planName(subscription.scheduledPlanCode)}。</small>}</div>
     </section>
 
-    {pendingOrder?.status === 'pending' && <section className="billing-pending" aria-live="polite"><strong>正在等待支付宝确认付款</strong><span>订单号：{pendingOrder.orderNo}。支付完成后此页面会自动更新。</span>{pendingOrder.provider === 'manual' && canManageBilling && <button className="secondary" type="button" onClick={() => void confirmManualPayment()}>确认测试付款</button>}</section>}
+    {pendingOrder?.status === 'pending' && <section className="billing-pending" aria-live="polite"><strong>{pendingOrder.provider === 'manual' ? '测试支付订单' : '等待付款'}</strong><span>订单号：{pendingOrder.orderNo}。支付完成后此页面会自动更新。</span>{pendingOrder.provider === 'manual' && canManageBilling && <button className="secondary" type="button" onClick={() => void confirmManualPayment()}>确认测试付款</button>}{pendingOrder.provider === 'alipay' && canManageBilling && <button className="primary" type="button" disabled={paymentBusy} onClick={() => void resumePayment()}>继续支付</button>}</section>}
 
-    <section className="billing-section"><div className="billing-section-heading"><div><h3>年度套餐</h3><p>主动续费，不会自动扣款。降级会保存为下一次续费选择。</p></div></div><div className="billing-plan-grid">
-      {plans.map((plan, index) => {
+    <section className="billing-section"><div className="billing-section-heading"><div><h3>订阅套餐</h3><p>个人免费自动生效，无需续费。付费套餐按年主动续费，不会自动扣款。降级会保存为下一次续费选择。</p></div></div><div className="billing-plan-grid">
+      {plans.map((plan) => {
         const isCurrent = plan.code === currentPlan.code;
         const isCustom = plan.code === 'custom';
+        const isFree = plan.code === 'free';
         const isDowngrade = !isCustom && plan.priceCents !== null && currentPlan.priceCents !== null && plan.priceCents < currentPlan.priceCents;
         const actionLabel = isCurrent ? '续费一年' : isDowngrade ? `安排降级至${plan.name}` : `升级至${plan.name}`;
-        return <article className={`billing-plan${isCurrent ? ' current' : ''}`} key={plan.code}><div className="billing-plan-heading"><h4>{plan.name}</h4>{isCurrent && <span>当前</span>}</div><strong className="billing-price">{plan.priceCents == null ? '联系开通' : formatAmount(plan.priceCents)}</strong><p>{plan.memberLimit == null ? '成员数量按合同约定' : `最多 ${plan.memberLimit} 名组织成员`}</p><small>{plan.description}</small>{canManageBilling && (isCustom ? <button className="secondary" type="button" onClick={() => showMessage('请联系 VibePlan 获取定制企业套餐。')}>联系开通定制企业</button> : <button className={isCurrent ? 'secondary' : 'primary'} type="button" disabled={Boolean(pendingOrder?.status === 'pending') || (index === 0 && !isCurrent)} onClick={() => void startCheckout(plan)}>{actionLabel}</button>)}</article>;
+        return <article className={`billing-plan${isCurrent ? ' current' : ''}`} key={plan.code}><div className="billing-plan-heading"><h4>{plan.name}</h4>{isCurrent && <span>当前</span>}</div><strong className="billing-price">{isFree ? '长期免费' : plan.priceCents == null ? '联系开通' : formatAmount(plan.priceCents)}</strong><p>{plan.memberLimit == null ? '成员数量按合同约定' : `最多 ${plan.memberLimit} 名组织成员`}</p><small>{plan.description}</small>{isFree ? <p className="muted">自动生效，无需续费</p> : canManageBilling && (isCustom ? <button className="secondary" type="button" onClick={() => showMessage('请联系 VibePlan 获取定制企业套餐。')}>联系开通定制企业</button> : <button className={isCurrent ? 'secondary' : 'primary'} type="button" disabled={Boolean(pendingOrder?.status === 'pending') || summary.payment?.available === false} onClick={() => void startCheckout(plan)}>{actionLabel}</button>)}</article>;
       })}
     </div></section>
 

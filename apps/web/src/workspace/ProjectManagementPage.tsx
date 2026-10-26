@@ -51,18 +51,25 @@ export function ProjectManagementPage({ projects, activeProjectId, onBack, onSel
   const taskDirectoryRef = useRef<HTMLElement | null>(null);
   const taskViewPanelRef = useRef<HTMLDivElement | null>(null);
   const syncingTaskScrollRef = useRef(false);
+  const reloadGenerationRef = useRef(0);
   const project = projects.find((item) => item.id === projectId) ?? projects[0];
   const reload = useCallback(() => {
+    const generation = ++reloadGenerationRef.current;
     if (!projectId) return;
     Promise.all([
       apiRequest<WorkItem[]>(`/projects/${projectId}/work-items`),
       apiRequest<WorkItemEvent[]>(`/projects/${projectId}/events`),
     ]).then(([value, eventValue]) => {
+      if (generation !== reloadGenerationRef.current) return;
       setItems(value);
       setEvents(eventValue);
       setSelected((current) => value.find((item) => item.id === current?.id) ?? null);
     }).catch(() => undefined);
-    apiRequest<typeof health>(`/projects/${projectId}/health`).then(setHealth).catch(() => setHealth(null));
+    apiRequest<typeof health>(`/projects/${projectId}/health`).then((value) => {
+      if (generation === reloadGenerationRef.current) setHealth(value);
+    }).catch(() => {
+      if (generation === reloadGenerationRef.current) setHealth(null);
+    });
   }, [projectId]);
 
   useEffect(() => {
@@ -222,32 +229,24 @@ export function ProjectManagementPage({ projects, activeProjectId, onBack, onSel
     const optimisticById = new Map(changes.map(({ item, dueDate, estimate }) => [item.id, { ...item, dueDate, estimate }]));
     setItems((current) => current.map((candidate) => optimisticById.get(candidate.id) ?? candidate));
     setSelected((current) => current ? optimisticById.get(current.id) ?? current : current);
-    void Promise.all(changes.map(async ({ item, dueDate, estimate }) => apiRequest<WorkItem>(`/work-items/${item.id}`, {
+    void Promise.allSettled(changes.map(async ({ item, dueDate, estimate }) => apiRequest<WorkItem>(`/work-items/${item.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ dueDate, estimate, version: item.version ?? 1 }),
-    }))).then((updatedItems) => {
+    }))).then((results) => {
+      const updatedItems = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
       const updatedById = new Map(updatedItems.map((item) => [item.id, item]));
+      const failedIds = new Set(results.flatMap((result, index) => result.status === 'rejected' ? [changes[index].item.id] : []));
       setItems((current) => current.map((candidate) => {
         const updated = updatedById.get(candidate.id);
-        return updated ? { ...candidate, dueDate: updated.dueDate, estimate: updated.estimate, version: updated.version } : candidate;
+        if (updated) return { ...candidate, dueDate: updated.dueDate, estimate: updated.estimate, version: updated.version };
+        return failedIds.has(candidate.id) ? (optimisticById.get(candidate.id) ? changes.find(({ item }) => item.id === candidate.id)?.item ?? candidate : candidate) : candidate;
       }));
       setSelected((current) => {
         const updated = current ? updatedById.get(current.id) : undefined;
-        return current && updated ? { ...current, dueDate: updated.dueDate, estimate: updated.estimate, version: updated.version } : current;
+        if (current && updated) return { ...current, dueDate: updated.dueDate, estimate: updated.estimate, version: updated.version };
+        return current && failedIds.has(current.id) ? changes.find(({ item }) => item.id === current.id)?.item ?? current : current;
       });
       void reload();
-    }).catch(() => {
-      const originalsById = new Map(changes.map(({ item }) => [item.id, item]));
-      setItems((current) => current.map((candidate) => {
-        const optimistic = optimisticById.get(candidate.id);
-        const original = originalsById.get(candidate.id);
-        return optimistic && original && candidate.version === optimistic.version ? original : candidate;
-      }));
-      setSelected((current) => {
-        const optimistic = current ? optimisticById.get(current.id) : undefined;
-        const original = current ? originalsById.get(current.id) : undefined;
-        return current && optimistic && original && current.version === optimistic.version ? original : current;
-      });
     });
   }
 

@@ -43,7 +43,17 @@ export class ApiClient {
         ...(init.headers ?? {}),
       },
     });
-    const payload = await response.json().catch(() => ({}));
+
+    let payload: unknown = {};
+    try {
+      payload = await response.json();
+    } catch (error) {
+      if (!response.ok) {
+        throw new ApiRequestError(response.status, `API request failed: ${response.status} ${response.statusText}`, undefined);
+      }
+      // OK responses without JSON body are allowed (e.g., 204 No Content)
+    }
+
     if (response.status === 401 && allowRefresh && this.session?.refreshToken && path !== '/auth/refresh') {
       const refreshed = await this.requestRefresh();
       if (refreshed) return this.request<T>(path, init, false);
@@ -53,7 +63,8 @@ export class ApiClient {
       throw new AuthenticationRequiredError(server);
     }
     if (!response.ok) {
-      throw new ApiRequestError(response.status, payload.error?.message ?? `API request failed: ${response.status}`, payload.error?.code);
+      const errorPayload = payload as { error?: { message?: string; code?: string } };
+      throw new ApiRequestError(response.status, errorPayload.error?.message ?? `API request failed: ${response.status}`, errorPayload.error?.code);
     }
     return payload as T;
   }

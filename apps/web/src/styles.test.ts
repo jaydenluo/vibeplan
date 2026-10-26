@@ -5,7 +5,7 @@ const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
 
 describe('task directory layout', () => {
   it('uses a fluid project card grid with up to four columns', () => {
-    expect(styles).toContain('.project-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }');
+    expect(styles).toContain('.project-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px; }');
     expect(styles).toContain('.project-card { display: grid; grid-template-rows: auto auto auto; gap: 14px; min-width: 0;');
     expect(styles).not.toContain('gap: 14px; width: min(480px, 100%);');
   });

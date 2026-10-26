@@ -7,7 +7,7 @@ import { AuthService } from '../auth/service.js';
 import { AccessService } from '../access/service.js';
 beforeAll(() => migrate());
 it('replays a committed mutation without duplicating a task, rejects mismatches and enforces current access', async () => {
-  const auth = new AuthService(db, { sendRegistrationCode: async () => {}, sendVerification: async () => {}, sendPasswordReset: async () => {} }, { accessSecret: 'mutation-test', emailVerificationRequired: false });
+  const auth = new AuthService(db, { isConfigured: () => true, assertConfigured: () => {}, sendRegistrationCode: async () => {}, sendVerification: async () => {}, sendPasswordReset: async () => {} }, { accessSecret: 'mutation-test', emailVerificationRequired: false });
   const email = `${randomUUID()}@example.com`;
   const user = await auth.register(email, 'test-password', 'Tester');
   const access = new AccessService(db);

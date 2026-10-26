@@ -11,11 +11,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 h1 { margin: 0; font-size: 32px; letter-spacing: 0; }
 .muted { color: #6a7884; line-height: 1.6; }
 .auth-form { display: grid; gap: 16px; margin-top: 28px; }
-.verification-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.auth-field { display: grid; min-width: 0; gap: 6px; }
+.verification-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
 .verification-row label { min-width: 0; }
+.verification-row > .secondary { align-self: start; margin-top: 23px; }
 label { display: grid; gap: 7px; color: #4d5a65; font-size: 13px; font-weight: 650; }
 input { width: 100%; border: 1px solid #cbd5dd; border-radius: 7px; padding: 11px 12px; color: #20252b; background: #fbfcfd; }
 input:focus { border-color: #477087; outline: 3px solid #47708722; }
+input[aria-invalid="true"] { border-color: #b6534c; }
+.field-error { color: #a33f3f; font-size: 12px; font-weight: 600; line-height: 1.35; }
 .primary, .secondary { border: 0; border-radius: 7px; padding: 11px 15px; font-weight: 700; }
 .primary { color: #fff; background: #2f657d; }
 .secondary { color: #315a6c; border: 1px solid #c5d4dc; background: #fff; }
@@ -69,7 +73,7 @@ input:focus { border-color: #477087; outline: 3px solid #47708722; }
 .management-page { width: 100%; max-width: none; margin: 0 auto; }
 .team-management-page { max-width: none; width: 100%; }
 .projects-page { width: 100%; max-width: none; padding-bottom: 40px; }
-.project-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.project-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px; }
 .project-card { display: grid; grid-template-rows: auto auto auto; gap: 14px; min-width: 0; min-height: 0; padding: 20px 22px; border: 1px solid #d8e0e5; border-radius: 12px; color: #294e5e; background: #fff; text-align: left; cursor: pointer; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
 .project-card:hover, .project-card:focus-visible { border-color: #6b9aae; box-shadow: 0 14px 30px #24374618; transform: translateY(-3px); outline: none; }
 .project-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -527,7 +531,7 @@ input:focus { border-color: #477087; outline: 3px solid #47708722; }
 .billing-section-heading p { margin: 5px 0 0; color: #71808a; font-size: 12px; }
 .billing-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .billing-plan { display: grid; align-content: start; gap: 10px; min-height: 245px; padding: 16px; border: 1px solid #d8e0e5; border-radius: 8px; background: #fff; }
-.billing-plan.current { border-color: #6b9aae; box-shadow: inset 0 0 0 1px #c5dce4; }
+.billing-plan.current { border-color: #6b9aae; background: #eef8f0; box-shadow: inset 0 0 0 1px #c5dce4; }
 .billing-plan-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .billing-plan h4 { margin: 0; color: #294e5e; font-size: 15px; }
 .billing-plan-heading span { border-radius: 4px; padding: 3px 6px; color: #24586d; background: #e4f1f4; font-size: 10px; font-weight: 750; }
@@ -826,8 +830,7 @@ dt { color: #71808a; font-size: 12px; } dd { margin: 3px 0 18px; }
 @media (max-width: 760px) { .team-detail-header { display: block; } .team-detail-title { margin: 16px 0; } .team-detail-actions { justify-content: flex-end; } .team-detail-stats { grid-template-columns: 1fr; } .team-members-panel { padding: 16px; } .team-member-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 12px 0; } .team-member-actions { grid-column: 1 / -1; justify-content: flex-start; } .team-permission-note { display: block; } .team-permission-note strong { display: block; margin-bottom: 4px; } }
 @media (max-width: 980px) { .project-workspace { grid-template-columns: 1fr; } .project-list-pane { border-right: 0; border-bottom: 1px solid #d8e0e5; } .project-inspector { min-height: 420px; } }
 @media (min-width: 761px) and (max-width: 980px) { .project-management-body { grid-template-columns: 220px minmax(0, 1fr); } }
-@media (max-width: 1100px) { .project-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .project-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .team-grid, .team-management-page .team-grid { grid-template-columns: 1fr; } .project-shell-header { flex-wrap: wrap; gap: 8px 16px; padding-top: 12px; padding-bottom: 12px; } .project-shell-title { order: 3; flex-basis: 100%; } .project-shell-actions { margin-left: auto; } .project-management-body { display: block; min-height: auto; } .project-directory { border-right: 0; border-bottom: 1px solid #d8e0e5; } .project-directory.collapsed .directory-heading { justify-content: space-between; padding: 20px 20px 8px; } .project-directory.collapsed .directory-heading strong, .project-directory.collapsed .directory-heading span, .project-directory.collapsed .directory-item-label, .project-directory.collapsed .directory-collapse-toggle > span:last-child { display: initial; } .project-directory.collapsed .directory-item { display: grid; grid-template-columns: 32px minmax(0, 1fr); justify-content: initial; padding: 10px; } .project-directory.collapsed .directory-collapse-toggle { width: auto; margin-inline: 10px; } .directory-heading { padding-bottom: 8px; } .directory-list { display: flex; overflow-x: auto; padding-bottom: 12px; } .directory-item { min-width: 190px; } .directory-collapse-toggle { display: none; } .project-task-area { padding-top: 22px; } .task-area-header { display: block; } .task-view-switcher { margin-top: 16px; width: fit-content; } .task-board-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .project-timeline-row { grid-template-columns: 66px 10px minmax(0, 1fr); } .project-timeline-row small { grid-column: 3; } .task-summary { grid-template-columns: 1fr; } .task-summary dl { grid-column: 1; } .detail-columns { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .team-grid, .team-management-page .team-grid { grid-template-columns: 1fr; } .project-shell-header { flex-wrap: wrap; gap: 8px 16px; padding-top: 12px; padding-bottom: 12px; } .project-shell-title { order: 3; flex-basis: 100%; } .project-shell-actions { margin-left: auto; } .project-management-body { display: block; min-height: auto; } .project-directory { border-right: 0; border-bottom: 1px solid #d8e0e5; } .project-directory.collapsed .directory-heading { justify-content: space-between; padding: 20px 20px 8px; } .project-directory.collapsed .directory-heading strong, .project-directory.collapsed .directory-heading span, .project-directory.collapsed .directory-item-label, .project-directory.collapsed .directory-collapse-toggle > span:last-child { display: initial; } .project-directory.collapsed .directory-item { display: grid; grid-template-columns: 32px minmax(0, 1fr); justify-content: initial; padding: 10px; } .project-directory.collapsed .directory-collapse-toggle { width: auto; margin-inline: 10px; } .directory-heading { padding-bottom: 8px; } .directory-list { display: flex; overflow-x: auto; padding-bottom: 12px; } .directory-item { min-width: 190px; } .directory-collapse-toggle { display: none; } .project-task-area { padding-top: 22px; } .task-area-header { display: block; } .task-view-switcher { margin-top: 16px; width: fit-content; } .task-board-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .project-timeline-row { grid-template-columns: 66px 10px minmax(0, 1fr); } .project-timeline-row small { grid-column: 3; } .task-summary { grid-template-columns: 1fr; } .task-summary dl { grid-column: 1; } .detail-columns { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .project-card-grid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .task-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 440px) { .task-overview-metrics { grid-template-columns: 1fr; } .task-overview { padding-inline: 12px; } }

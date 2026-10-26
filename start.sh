@@ -46,15 +46,27 @@ if [[ ! -d node_modules ]]; then
   pnpm install --frozen-lockfile
 fi
 
-stop_port 5173
-stop_port 4000
+proxy_target=""
+if [[ -f apps/web/.env.local ]]; then
+  proxy_target="$(sed -n 's/^VITE_API_PROXY_TARGET=//p' apps/web/.env.local | head -1)"
+fi
 
-if [[ -f apps/web/.env.local ]] && rg -q '^VITE_API_PROXY_TARGET=https?://' apps/web/.env.local; then
+is_remote_proxy_target() {
+  local host
+  host="$(node -e 'try { console.log(new URL(process.argv[1]).hostname) } catch { process.exit(1) }' "$1" 2>/dev/null || true)"
+  [[ -n "$host" && "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "::1" ]]
+}
+
+stop_port 5173
+
+if [[ "$proxy_target" =~ ^https?:// ]] && is_remote_proxy_target "$proxy_target"; then
   echo "Starting local Web with the configured remote Vibe Plan API proxy..."
   echo "  Web: http://localhost:5173"
-  echo "  Data API: $(sed -n 's/^VITE_API_PROXY_TARGET=//p' apps/web/.env.local | head -1)"
+  echo "  Data API: $proxy_target"
   exec pnpm --filter @vibeplan/web dev
 fi
+
+stop_port 4000
 
 if [[ ! -f .env ]]; then
   cp .env.example .env

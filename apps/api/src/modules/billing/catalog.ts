@@ -10,7 +10,8 @@ export type BillingPlan = Readonly<{
 }>;
 
 export const BILLING_PLANS: Readonly<Record<BillingPlanCode, BillingPlan>> = Object.freeze({
-  free: { code: 'free', name: 'Personal Free', annualPriceCents: 0, seatLimit: 1, projectLimit: 10, publiclyPurchasable: false },
+  free: { code: 'free', name: 'Personal Free', annualPriceCents: 0, seatLimit: 1, projectLimit: 50, publiclyPurchasable: false },
+  personal: { code: 'personal', name: 'Personal', annualPriceCents: 12_800, seatLimit: 1, projectLimit: null, publiclyPurchasable: true },
   team_10: { code: 'team_10', name: 'Team 10', annualPriceCents: 48_000, seatLimit: 10, projectLimit: null, publiclyPurchasable: true },
   team_30: { code: 'team_30', name: 'Team 30', annualPriceCents: 128_000, seatLimit: 30, projectLimit: null, publiclyPurchasable: true },
   team_100: { code: 'team_100', name: 'Team 100', annualPriceCents: 368_000, seatLimit: 100, projectLimit: null, publiclyPurchasable: true },

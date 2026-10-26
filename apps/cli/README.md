@@ -61,7 +61,7 @@ vibeplan login
 
 The command prints a clickable Vibe Plan web address and a one-time device code. Open that address, sign in, approve the code, and return to the terminal. The code is valid for 10 minutes and can be used once; run `vibeplan login` again when it expires or approval fails. The session is stored in the operating-system Keychain, not in the project or Git.
 
-The default access token lasts 30 minutes and the refresh session lasts 30 days. The CLI automatically refreshes an expired access token and stores the replacement credentials in the operating-system Keychain. Each successful refresh renews the 30-day refresh window, so active users normally stay signed in. The server controls these values with `AUTH_ACCESS_TOKEN_TTL` and `AUTH_REFRESH_TOKEN_TTL`; the deployed server configuration is authoritative. Run `vibeplan login` again after the refresh window expires, `vibeplan logout`, credential revocation, or a server-side session reset. When `vibeplan start` runs in an interactive terminal with a missing or expired session, it shows `[1] Log in now  [2] Cancel`; after a successful device-code login it automatically continues starting the daemon. Scripts and the daemon only print the login command and never wait for input.
+The default access token lasts 30 minutes and the refresh session lasts 90 days. The CLI automatically refreshes an expired access token and stores the replacement credentials in the operating-system Keychain. Each successful refresh renews the 90-day refresh window, so active users normally stay signed in. The server controls these values with `AUTH_ACCESS_TOKEN_TTL` and `AUTH_REFRESH_TOKEN_TTL`; the deployed server configuration is authoritative. Run `vibeplan login` again after the refresh window expires, `vibeplan logout`, credential revocation, or a server-side session reset. When `vibeplan start` runs in an interactive terminal with a missing or expired session, it shows `[1] Log in now  [2] Cancel`; after a successful device-code login it automatically continues starting the daemon. Scripts and the daemon only print the login command and never wait for input.
 
 ### 2. Bind a code project
 
@@ -204,7 +204,7 @@ The default server is `https://vibeplan.szxinjin.cn`. Override it when using ano
 
 ### First-time setup
 
-1. Run `vibeplan login`, or run `vibeplan start` and choose `[1] Log in now` when prompted. The terminal prints a one-time device code that is valid for 10 minutes and can be used once. Open the Vibe Plan web app, sign in, approve the code, and return to the terminal. Credentials are stored in the operating-system Keychain. The CLI refreshes its 30-minute access token automatically and renews the default 30-day refresh window while it is used; actual durations come from `AUTH_ACCESS_TOKEN_TTL` and `AUTH_REFRESH_TOKEN_TTL` on the server. Sign in again after the refresh window expires, logout, revocation, or a server-side session reset. After login from `vibeplan start`, startup continues automatically.
+1. Run `vibeplan login`, or run `vibeplan start` and choose `[1] Log in now` when prompted. The terminal prints a one-time device code that is valid for 10 minutes and can be used once. Open the Vibe Plan web app, sign in, approve the code, and return to the terminal. Credentials are stored in the operating-system Keychain. The CLI refreshes its 30-minute access token automatically and renews the default 90-day refresh window while it is used; actual durations come from `AUTH_ACCESS_TOKEN_TTL` and `AUTH_REFRESH_TOKEN_TTL` on the server. Sign in again after the refresh window expires, logout, revocation, or a server-side session reset. After login from `vibeplan start`, startup continues automatically.
 2. In a local Git project, run `vibeplan init --project-id PROJECT_ID`. This creates the `.vibe` files and adds only a marked Vibe Plan block to an existing `AGENTS.md`, preserving your own instructions.
 3. Run `vibeplan install-codex` and restart Codex. The Skill is installed under `$CODEX_HOME/skills/vibe-plan/` or `$HOME/.codex/skills/vibe-plan/`.
 4. Run `vibeplan start` in the project directory. It displays live sync logs in an interactive terminal; Ctrl-C detaches the log view without stopping synchronization. Reopen it with `vibeplan logs --follow`, check the daemon with `vibeplan status`, or stop it with `vibeplan stop`. For foreground debugging, use `vibeplan daemon --foreground` instead. Both run the same synchronization loop. After upgrading the CLI, stop and restart each project's daemon; an already-running daemon keeps using its old code until restarted.
@@ -263,7 +263,7 @@ Then run `vibeplan install-codex --force` once if the Codex Skill needs the late
 
 ### 登录与同步
 
-同一个操作系统用户的终端和多个项目共享 Keychain 登录。Access token 默认有效 30 分钟，refresh 会话默认 30 天，每次成功续期重新计算有效期。超过期限未使用、退出登录、撤销凭据或清空服务端会话时需要重新登录。网络中断和服务器临时故障不会清除新版 CLI 的凭据。
+同一个操作系统用户的终端和多个项目共享 Keychain 登录。Access token 默认有效 30 分钟，refresh 会话默认 90 天，每次成功续期重新计算有效期。超过期限未使用、退出登录、撤销凭据或清空服务端会话时需要重新登录。网络中断和服务器临时故障不会清除新版 CLI 的凭据。
 
 CLI 续期必须由服务器返回新 access/refresh token；旧服务器如果只设置浏览器 Cookie，会导致 CLI 续期失败。请同时更新服务器 API 和 CLI。升级 CLI 后，在每个项目根目录运行 `vibeplan stop`，再运行 `vibeplan start`，以重启使用旧代码的后台。
 
@@ -331,7 +331,7 @@ vibeplan task:report TASK_ID --task-version VERSION --file report.json
 
 ### Sessions and synchronization
 
-Terminals and projects under the same OS user share the Keychain session. Access tokens default to 30 minutes; refresh sessions default to 30 days and renew on successful refresh. Inactivity beyond expiry, logout, revocation or deletion of server sessions requires another login. Temporary network/server failures preserve credentials in the updated CLI.
+Terminals and projects under the same OS user share the Keychain session. Access tokens default to 30 minutes; refresh sessions default to 90 days and renew on successful refresh. Inactivity beyond expiry, logout, revocation or deletion of server sessions requires another login. Temporary network/server failures preserve credentials in the updated CLI.
 
 Native refresh responses must include the rotated access and refresh tokens. An older server returning only browser cookies cannot renew CLI credentials correctly: update both API and CLI. After upgrading, run `vibeplan stop` and `vibeplan start` in each project to restart its old daemon.
 

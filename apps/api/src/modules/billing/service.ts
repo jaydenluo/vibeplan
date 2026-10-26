@@ -44,28 +44,22 @@ export class BillingService {
       subscription: { planCode: policy.planCode, status: policy.state === 'free' ? 'free' : policy.state === 'read_only' ? 'expired' : policy.state, periodStartedAt: subscription?.periodStart ?? null, periodEndsAt: subscription?.periodEnd ?? null, graceEndsAt: subscription?.graceEndsAt ?? null, scheduledPlanCode: subscription?.scheduledPlanCode ?? null, scheduledEffectiveAt: subscription?.scheduledAt ?? null },
       policy: { canWriteOrganization: policy.canWrite, canCreateProject: policy.canCreateProject, canManageMembers: policy.canAddMember, canManageBilling: role === 'owner', memberUsage: policy.memberUsage.used, memberLimit: policy.memberUsage.limit, projectUsage: policy.projectUsage.used, projectLimit: policy.projectUsage.limit, denialCode: policy.denialCode, denialReason: policy.denialCode ? this.denialMessage(policy.denialCode) : null },
       orders: orders.map((order) => orderView(order)),
+      payment: { provider: this.provider.name, available: this.paymentAvailable(), testMode: this.provider.name === 'manual' && process.env.NODE_ENV !== 'production' },
     };
   }
 
   async createOrder(userId: string, organizationId: string, planCode: BillingPlanCode): Promise<BillingOrderView> {
+    this.requirePaymentAvailable();
     const created = await this.database.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${organizationId}))`);
       const service = new BillingService(tx as unknown as PostgresJsDatabase, { now: this.now, provider: this.provider });
       return service.createOrderLocked(userId, organizationId, planCode);
     });
-    if (!created.created || created.view.provider === 'internal') return created.view;
+    if (created.view.provider === 'internal') return created.view;
     try {
-      const targetPlan = getBillingPlan(created.view.planCode);
-      const payment = await this.provider.createPayment({
-        orderNo: created.view.orderNo,
-        subject: `VibePlan ${targetPlan.name} annual subscription`,
-        amountCents: created.view.amountCents,
-        notifyUrl: this.paymentUrl('ALIPAY_NOTIFY_URL'),
-        returnUrl: this.paymentUrl('ALIPAY_RETURN_URL', organizationId),
-      });
-      return { ...created.view, payment };
+      return { ...created.view, payment: await this.paymentFor(created.view, organizationId) };
     } catch (error) {
-      await this.database.update(billingOrders).set({ status: 'failed', closedAt: this.now(), updatedAt: this.now() }).where(and(eq(billingOrders.id, created.view.id), eq(billingOrders.status, 'pending')));
+      if (created.created) await this.database.update(billingOrders).set({ status: 'failed', closedAt: this.now(), updatedAt: this.now() }).where(and(eq(billingOrders.id, created.view.id), eq(billingOrders.status, 'pending')));
       throw error;
     }
   }
@@ -85,7 +79,15 @@ export class BillingService {
     const periodEnd = addYear(periodStart);
     const amountCents = action === 'upgrade' && subscription ? this.upgradeAmount(targetPlan.annualPriceCents, currentPlan.annualPriceCents ?? 0, subscription.periodStart, subscription.periodEnd, now) : targetPlan.annualPriceCents;
     const existingPending = await this.database.select().from(billingOrders).where(and(eq(billingOrders.organizationId, organizationId), eq(billingOrders.status, 'pending'))).orderBy(desc(billingOrders.createdAt)).limit(1);
-    if (existingPending[0]) return { view: orderView(existingPending[0]), created: false };
+    if (existingPending[0]) {
+      if (existingPending[0].provider === 'manual' && this.provider.name === 'alipay') {
+        await this.database.update(billingOrders).set({ status: 'closed', closedAt: now, updatedAt: now }).where(eq(billingOrders.id, existingPending[0].id));
+      } else {
+        if (existingPending[0].planCode !== planCode) throw new BillingError('BILLING_PENDING_ORDER_EXISTS', 'Finish the existing unpaid order before choosing another plan.', 409);
+        if (existingPending[0].provider !== this.provider.name) throw new BillingError('PAYMENT_PROVIDER_MISMATCH', 'The unpaid order uses another payment provider.', 409);
+        return { view: orderView(existingPending[0]), created: false };
+      }
+    }
     const [order] = await this.database.insert(billingOrders).values({ organizationId, purchaserId: userId, orderNo: this.orderNumber(), planCode, amountCents, status: 'pending', provider: this.provider.name, periodStart, periodEnd, planSnapshot: { ...targetPlan, action, creditedCents: targetPlan.annualPriceCents - amountCents } }).returning();
     return { view: orderView(order), created: true };
   }
@@ -95,6 +97,19 @@ export class BillingService {
     const [order] = await this.database.select().from(billingOrders).where(and(eq(billingOrders.id, orderId), eq(billingOrders.organizationId, organizationId))).limit(1);
     if (!order) throw new BillingError('BILLING_ORDER_NOT_FOUND', 'Billing order does not exist.', 404);
     return orderView(order);
+  }
+
+  async resumePayment(userId: string, organizationId: string, orderId: string): Promise<BillingOrderView> {
+    await this.requireOwner(userId, organizationId);
+    this.requirePaymentAvailable();
+    const order = await this.getOrder(userId, organizationId, orderId);
+    if (order.status !== 'pending') throw new BillingError('BILLING_ORDER_NOT_PAYABLE', 'This order is no longer payable.', 409);
+    if (order.provider !== this.provider.name) throw new BillingError('PAYMENT_PROVIDER_MISMATCH', 'This order uses another payment provider.', 409);
+    return { ...order, payment: await this.paymentFor(order, organizationId) };
+  }
+
+  private paymentFor(order: BillingOrderView, organizationId: string): Promise<PaymentRequest> {
+    return this.provider.createPayment({ orderNo: order.orderNo, subject: `VibePlan ${getBillingPlan(order.planCode).name} annual subscription`, amountCents: order.amountCents, notifyUrl: this.paymentUrl('ALIPAY_NOTIFY_URL'), returnUrl: this.paymentUrl('ALIPAY_RETURN_URL', organizationId) });
   }
 
   async confirmManualOrder(userId: string, organizationId: string, orderId: string): Promise<BillingOrderView> {
@@ -132,7 +147,17 @@ export class BillingService {
       if (duplicateTransaction) throw new BillingProviderError('PAYMENT_VERIFICATION_FAILED', 'This provider transaction is already attached to another order.');
       const notificationId = notification.notificationId || notification.providerTransactionId;
       const [recorded] = await tx.insert(billingProviderNotifications).values({ billingOrderId: order.id, provider, notificationId, providerTransactionId: notification.providerTransactionId, payload: metadata, verificationResult: 'verified', verifiedAt: this.now(), processedAt: this.now() }).onConflictDoNothing().returning({ id: billingProviderNotifications.id });
-      if (!recorded) { const [current] = await tx.select().from(billingOrders).where(eq(billingOrders.id, order.id)).limit(1); return orderView(current ?? order); }
+      if (!recorded) {
+        const [existingNotification] = await tx.select({ billingOrderId: billingProviderNotifications.billingOrderId, providerTransactionId: billingProviderNotifications.providerTransactionId })
+          .from(billingProviderNotifications)
+          .where(and(eq(billingProviderNotifications.provider, provider), eq(billingProviderNotifications.notificationId, notificationId)))
+          .limit(1);
+        if (!existingNotification || existingNotification.billingOrderId !== order.id || existingNotification.providerTransactionId !== notification.providerTransactionId) {
+          throw new BillingProviderError('PAYMENT_VERIFICATION_FAILED', 'This provider notification is already attached to another payment.');
+        }
+        const [current] = await tx.select().from(billingOrders).where(eq(billingOrders.id, order.id)).limit(1);
+        return orderView(current ?? order);
+      }
       const paidAt = this.now();
       const [paidOrder] = await tx.update(billingOrders).set({ status: 'paid', providerTransactionId: notification.providerTransactionId, paidAt, updatedAt: paidAt }).where(eq(billingOrders.id, order.id)).returning();
       const plan = getBillingPlan(paidOrder.planCode);
@@ -145,14 +170,30 @@ export class BillingService {
   }
 
   private providerFromEnvironment(): BillingProvider {
-    const provider = process.env.BILLING_PROVIDER ?? 'manual';
+    const provider = process.env.BILLING_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'alipay' : 'manual');
     if (provider === 'manual') return new ManualBillingProvider();
-    if (provider === 'alipay') return createAlipayProviderFromEnv();
-    throw new BillingError('PAYMENT_CONFIGURATION_INVALID', `Unsupported billing provider: ${provider}.`, 500);
+    if (provider === 'alipay') {
+      try { return createAlipayProviderFromEnv(); } catch { /* Billing remains readable while credentials are being configured. */ }
+    }
+    return { name: 'unavailable', createPayment: async () => { throw new BillingError('PAYMENT_CONFIGURATION_INVALID', 'Alipay credentials are not configured.', 503); }, verifyNotification: () => { throw new BillingError('PAYMENT_CONFIGURATION_INVALID', 'Alipay credentials are not configured.', 503); } };
+  }
+  private paymentAvailable(): boolean {
+    if (this.provider.name === 'unavailable' || (this.provider.name === 'manual' && process.env.NODE_ENV === 'production')) return false;
+    if (this.provider.name === 'alipay') {
+      try { this.paymentUrl('ALIPAY_NOTIFY_URL'); this.paymentUrl('ALIPAY_RETURN_URL'); } catch { return false; }
+    }
+    return true;
+  }
+  private requirePaymentAvailable(): void {
+    if (!this.paymentAvailable()) throw new BillingError('PAYMENT_PROVIDER_NOT_AVAILABLE', 'Payments are not configured. Please contact the administrator.', 503);
   }
   private paymentUrl(variable: 'ALIPAY_NOTIFY_URL' | 'ALIPAY_RETURN_URL', organizationId?: string): string {
     const value = process.env[variable];
-    if (value) return variable === 'ALIPAY_RETURN_URL' && organizationId ? value.replaceAll('ORGANIZATION_ID', encodeURIComponent(organizationId)) : value;
+    if (value) {
+      const url = new URL(value);
+      if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new BillingError('PAYMENT_CONFIGURATION_INVALID', `${variable} must use HTTPS.`, 503);
+      return variable === 'ALIPAY_RETURN_URL' && organizationId ? value.replaceAll('ORGANIZATION_ID', encodeURIComponent(organizationId)) : value;
+    }
     if (this.provider.name === 'manual') return 'http://localhost/manual-payment';
     throw new BillingError('PAYMENT_CONFIGURATION_INVALID', `${variable} must be configured for Alipay.`, 503);
   }

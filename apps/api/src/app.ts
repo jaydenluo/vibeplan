@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from './db/client.js';
 import { AuthError, AuthService } from './modules/auth/service.js';
-import { ConsoleMailer } from './modules/mail/mailer.js';
+import { EmailDeliveryError, SmtpMailer } from './modules/mail/mailer.js';
 import { AccessError, AccessService } from './modules/access/service.js';
 import { BillingError, BillingService } from './modules/billing/service.js';
 import { BillingEntitlementError } from './modules/billing/entitlements.js';
@@ -102,7 +102,7 @@ const workLogCorrectionSchema = workLogSchema.partial().extend({ version: z.numb
 const dependencySchema = z.object({ dependsOn: z.array(z.string().uuid()) });
 const milestoneSchema = z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(2000).default(''), targetDate: z.string().date().nullable().default(null) });
 const milestoneAssignmentSchema = z.object({ milestoneId: z.string().uuid() });
-const billingOrderSchema = z.object({ planCode: z.enum(['free', 'team_10', 'team_30', 'team_100', 'enterprise_1000', 'custom']) });
+const billingOrderSchema = z.object({ planCode: z.enum(['free', 'personal', 'team_10', 'team_30', 'team_100', 'enterprise_1000', 'custom']) });
 const adminPageQuerySchema = z.object({ q: z.string().trim().max(160).optional(), cursor: z.string().uuid().optional(), limit: z.coerce.number().int().min(1).max(100).optional() });
 const adminOrganizationQuerySchema = adminPageQuerySchema.extend({ planCode: z.string().max(32).optional(), state: z.enum(['free', 'active', 'grace', 'read_only']).optional() });
 const adminOrderQuerySchema = adminPageQuerySchema.extend({ status: z.string().max(32).optional(), planCode: z.string().max(32).optional(), from: z.string().date().optional(), to: z.string().date().optional() });
@@ -154,6 +154,18 @@ function requestToken(request: FastifyRequest): string | undefined {
   return request.cookies.vibe_access;
 }
 
+/**
+ * Validates and returns a UUID path parameter.
+ * Throws a 400 error if the parameter is not a valid UUID.
+ */
+function validateUuidParam(value: string, paramName: string): string {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(value)) {
+    throw { statusCode: 400, message: `Invalid ${paramName}: must be a valid UUID` };
+  }
+  return value;
+}
+
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const corsOrigins = configuredCorsOrigins();
   const accessSecret = configuredAccessSecret();
@@ -174,11 +186,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   const auth = options.authService ?? new AuthService(
     db,
-    new ConsoleMailer(),
+    new SmtpMailer(),
     {
       accessSecret,
       accessTokenTtl: process.env.AUTH_ACCESS_TOKEN_TTL ?? '30m',
-      refreshTokenTtlMs: parseDurationMs(process.env.AUTH_REFRESH_TOKEN_TTL, 30 * 24 * 60 * 60 * 1000),
+      refreshTokenTtlMs: parseDurationMs(process.env.AUTH_REFRESH_TOKEN_TTL, 90 * 24 * 60 * 60 * 1000),
       emailVerificationRequired: options.emailVerificationRequired ?? process.env.EMAIL_VERIFICATION_REQUIRED !== 'false',
     },
   );
@@ -199,6 +211,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     if (error instanceof SyncResetError) return reply.code(409).send({ error: { code: 'SYNC_RESET_REQUIRED', message: error.message } });
     if (error instanceof z.ZodError) {
       return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ') } });
+    }
+    if (error instanceof EmailDeliveryError) {
+      return reply.code(503).send({ error: { code: error.code, message: error.message } });
     }
     if (error instanceof AuthError) {
       const status = ['INVALID_CREDENTIALS', 'INVALID_ACCESS_TOKEN', 'INVALID_REFRESH_TOKEN'].includes(error.code) ? 401 : 400;
@@ -232,7 +247,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/version', async () => serverVersion());
 
-  app.get('/auth/config', async () => ({ emailVerificationRequired: auth.requiresEmailVerification() }));
+  app.get('/auth/config', async () => ({ emailVerificationRequired: auth.requiresEmailVerification(), emailDeliveryConfigured: auth.isEmailDeliveryConfigured() }));
 
   const authRateLimit = { max: options.authRateLimitMax ?? 10, timeWindow: '1 minute' };
 
@@ -283,7 +298,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return { status: 'signed_out' };
   });
 
-  app.post('/auth/refresh', async (request, reply) => {
+  app.post('/auth/refresh', { config: { rateLimit: authRateLimit } }, async (request, reply) => {
     const bodyToken = (request.body as { refreshToken?: string } | undefined)?.refreshToken;
     const refreshToken = request.cookies.vibe_refresh ?? bodyToken;
     if (!refreshToken) {
@@ -296,9 +311,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return bodyToken && !request.cookies.vibe_refresh ? session : { expiresInSeconds: session.expiresInSeconds };
   });
 
-  app.post('/auth/device/start', async () => auth.startDeviceAuthorization());
+  app.post('/auth/device/start', { config: { rateLimit: authRateLimit } }, async () => auth.startDeviceAuthorization());
 
-  app.post('/auth/device/approve', async (request) => {
+  app.post('/auth/device/approve', { config: { rateLimit: authRateLimit } }, async (request) => {
     const token = requestToken(request);
     if (!token) {
       throw new AuthError('INVALID_ACCESS_TOKEN', 'Access token is required.');
@@ -309,7 +324,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return { status: 'approved' };
   });
 
-  app.post('/auth/device/exchange', async (request) => {
+  app.post('/auth/device/exchange', { config: { rateLimit: authRateLimit } }, async (request) => {
     const body = deviceCodeSchema.parse(request.body);
     return auth.exchangeDevice(body.deviceCode);
   });
@@ -365,36 +380,59 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.get('/organizations/:organizationId/teams', async (request) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     return access.listTeams(await authenticatedUserId(request), params.organizationId);
   });
 
   app.get('/organizations/:organizationId/members', async (request) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     return access.listOrganizationMembers(await authenticatedUserId(request), params.organizationId);
   });
 
   app.get('/organizations/:organizationId/billing', async (request) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     return billing.getSummary(await authenticatedUserId(request), params.organizationId);
   });
 
   app.post('/organizations/:organizationId/billing/orders', async (request, reply) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     const body = billingOrderSchema.parse(request.body);
     return reply.code(201).send(await billing.createOrder(await authenticatedUserId(request), params.organizationId, body.planCode));
   });
 
   app.get('/organizations/:organizationId/billing/orders/:orderId', async (request) => {
     const params = request.params as { organizationId: string; orderId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
+    validateUuidParam(params.orderId, 'orderId');
     return billing.getOrder(await authenticatedUserId(request), params.organizationId, params.orderId);
   });
 
   app.post('/organizations/:organizationId/billing/orders/:orderId/confirm', async (request) => {
     const params = request.params as { organizationId: string; orderId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
+    validateUuidParam(params.orderId, 'orderId');
     return billing.confirmManualOrder(await authenticatedUserId(request), params.organizationId, params.orderId);
   });
 
-  app.post('/billing/alipay/notify', async (request, reply) => {
+  app.post('/organizations/:organizationId/billing/orders/:orderId/pay', async (request) => {
+    const params = request.params as { organizationId: string; orderId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
+    validateUuidParam(params.orderId, 'orderId');
+    return billing.resumePayment(await authenticatedUserId(request), params.organizationId, params.orderId);
+  });
+
+  // Payment webhook with dedicated rate limiting
+  app.post('/billing/alipay/notify', {
+    config: {
+      rateLimit: {
+        max: 20,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     try {
       const payload = z.record(z.string()).parse(request.body);
       await billing.confirmAlipayNotification(payload);
@@ -407,6 +445,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.post('/organizations/:organizationId/teams', async (request, reply) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     const body = teamSchema.parse(request.body);
     const team = await access.createTeam(await authenticatedUserId(request), params.organizationId, body.name);
     return reply.code(201).send(team);
@@ -414,12 +453,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.patch('/teams/:teamId', async (request) => {
     const params = request.params as { teamId: string };
+    validateUuidParam(params.teamId, 'teamId');
     const body = teamUpdateSchema.parse(request.body);
     return access.updateTeam(await authenticatedUserId(request), params.teamId, body.name!);
   });
 
   app.post('/organizations/:organizationId/invitations', async (request, reply) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     const body = invitationSchema.parse(request.body);
     const invitation = await access.inviteMember(await authenticatedUserId(request), params.organizationId, body.email, body.teamId);
     return reply.code(201).send(invitation);
@@ -427,6 +468,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.post('/organizations/:organizationId/invite-links', async (request) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     const body = inviteLinkSchema.parse(request.body ?? {});
     return access.createInviteLink(await authenticatedUserId(request), params.organizationId, body.teamId);
   });
@@ -450,26 +492,31 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.post('/invitations/:invitationId/accept', async (request) => {
     const params = request.params as { invitationId: string };
+    validateUuidParam(params.invitationId, 'invitationId');
     return access.acceptInvitation(await authenticatedUserId(request), params.invitationId);
   });
 
   app.post('/invitations/:invitationId/reject', async (request) => {
     const params = request.params as { invitationId: string };
+    validateUuidParam(params.invitationId, 'invitationId');
     return access.rejectInvitation(await authenticatedUserId(request), params.invitationId);
   });
 
   app.get('/organizations/:organizationId/projects', async (request) => {
     const params = request.params as { organizationId: string };
+    validateUuidParam(params.organizationId, 'organizationId');
     return access.listProjects(params.organizationId, await authenticatedUserId(request));
   });
 
   app.get('/projects/:projectId', async (request) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     return access.getProject(await authenticatedUserId(request), params.projectId);
   });
 
   app.post('/teams/:teamId/projects', async (request, reply) => {
     const params = request.params as { teamId: string };
+    validateUuidParam(params.teamId, 'teamId');
     const body = projectSchema.parse(request.body);
     const project = await access.createProject(await authenticatedUserId(request), params.teamId, body.name, body.repositoryUrl || undefined, body.description);
     return reply.code(201).send(project);
@@ -477,50 +524,61 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.patch('/projects/:projectId', async (request) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     const body = projectUpdateSchema.parse(request.body);
     return access.updateProject(await authenticatedUserId(request), params.projectId, { name: body.name, description: body.description, repositoryUrl: body.repositoryUrl });
   });
 
   app.get('/teams/:teamId/members', async (request) => {
     const params = request.params as { teamId: string };
+    validateUuidParam(params.teamId, 'teamId');
     return access.listTeamMembers(await authenticatedUserId(request), params.teamId);
   });
 
   app.get('/teams/:teamId/details', async (request) => {
     const params = request.params as { teamId: string };
+    validateUuidParam(params.teamId, 'teamId');
     return access.getTeamDetails(await authenticatedUserId(request), params.teamId);
   });
 
   app.patch('/teams/:teamId/members/:memberId', async (request) => {
     const params = request.params as { teamId: string; memberId: string };
+    validateUuidParam(params.teamId, 'teamId');
+    validateUuidParam(params.memberId, 'memberId');
     const body = teamMemberRoleSchema.parse(request.body);
     return access.updateTeamMember(await authenticatedUserId(request), params.teamId, params.memberId, body.role);
   });
 
   app.delete('/teams/:teamId/members/:memberId', async (request) => {
     const params = request.params as { teamId: string; memberId: string };
+    validateUuidParam(params.teamId, 'teamId');
+    validateUuidParam(params.memberId, 'memberId');
     return access.removeTeamMember(await authenticatedUserId(request), params.teamId, params.memberId);
   });
 
   app.post('/teams/:teamId/join-requests', async (request, reply) => {
     const params = request.params as { teamId: string };
+    validateUuidParam(params.teamId, 'teamId');
     const joinRequest = await access.requestTeamMembership(await authenticatedUserId(request), params.teamId);
     return reply.code(201).send(joinRequest);
   });
 
   app.get('/teams/:teamId/join-requests', async (request) => {
     const params = request.params as { teamId: string };
+    validateUuidParam(params.teamId, 'teamId');
     return access.listTeamJoinRequests(await authenticatedUserId(request), params.teamId);
   });
 
   app.post('/team-join-requests/:requestId/review', async (request) => {
     const params = request.params as { requestId: string };
+    validateUuidParam(params.requestId, 'requestId');
     const body = reviewSchema.parse(request.body);
     return access.reviewTeamJoinRequest(await authenticatedUserId(request), params.requestId, body.decision);
   });
 
   app.get('/projects/:projectId/work-items', async (request) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     const query = request.query as { status?: string; priority?: string; assigneeId?: string };
     return workItems.list(await authenticatedUserId(request), params.projectId, {
       status: query.status as never,
@@ -531,6 +589,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.post('/projects/:projectId/work-items', async (request, reply) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     const body = workItemCreateSchema.parse(request.body);
     const item = await mutate(request, await authenticatedUserId(request), { projectId: params.projectId }, body, (service, userId) => service.create(userId, params.projectId, body));
     return reply.code(201).send(item);
@@ -538,11 +597,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.get('/work-items/:workItemId', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     return workItems.get(await authenticatedUserId(request), params.workItemId);
   });
 
   app.patch('/work-items/:workItemId', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     const body = workItemUpdateSchema.parse(request.body);
     const { version, ...patch } = body;
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.update(userId, params.workItemId, version, patch));
@@ -550,11 +611,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.get('/work-items/:workItemId/permissions', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     return workItems.permissions(await authenticatedUserId(request), params.workItemId);
   });
 
   app.patch('/work-items/:workItemId/acceptance-items/:acceptanceItemId', async (request) => {
     const params = request.params as { workItemId: string; acceptanceItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
+    // acceptanceItemId is not a UUID - it's a client-generated identifier
     const body = acceptanceItemReviewSchema.parse(request.body);
     const { version, ...review } = body;
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId, reviewer: true }, body, (service, userId) => service.updateAcceptanceItem(userId, params.workItemId, version, params.acceptanceItemId, review));
@@ -562,17 +626,21 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.get('/work-items/:workItemId/work-logs', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     return workItems.workLogs(await authenticatedUserId(request), params.workItemId);
   });
 
   app.post('/work-items/:workItemId/work-logs', async (request, reply) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     const body = workLogSchema.parse(request.body);
     return reply.code(201).send(await mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.addWorkLog(userId, params.workItemId, body)));
   });
 
   app.patch('/work-items/:workItemId/work-logs/:logId', async (request) => {
     const params = request.params as { workItemId: string; logId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
+    validateUuidParam(params.logId, 'logId');
     const body = workLogCorrectionSchema.parse(request.body);
     const { version, ...patch } = body;
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.correctWorkLog(userId, params.workItemId, params.logId, version, patch));
@@ -580,77 +648,92 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.delete('/work-items/:workItemId/work-logs/:logId', async (request) => {
     const params = request.params as { workItemId: string; logId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
+    validateUuidParam(params.logId, 'logId');
     const body = workLogCorrectionSchema.pick({ version: true, reason: true }).parse(request.body);
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.correctWorkLog(userId, params.workItemId, params.logId, body.version, { reason: body.reason, revoked: true }));
   });
 
   app.get('/organizations/:organizationId/my-work', async (request) => {
     const { organizationId } = request.params as { organizationId: string };
+    validateUuidParam(organizationId, 'organizationId');
     return workItems.myWork(await authenticatedUserId(request), organizationId);
   });
 
   app.get('/organizations/:organizationId/overview', async (request) => {
     const { organizationId } = request.params as { organizationId: string };
+    validateUuidParam(organizationId, 'organizationId');
     return workItems.organizationOverview(await authenticatedUserId(request), organizationId);
   });
 
   app.get('/projects/:projectId/contributors', async (request) => {
     const { projectId } = request.params as { projectId: string };
+    validateUuidParam(projectId, 'projectId');
     const range = z.object({ from: z.string().date().optional(), to: z.string().date().optional() }).refine((range) => !range.from || !range.to || range.from <= range.to, 'Invalid time range').parse(request.query);
     return workItems.contributors(await authenticatedUserId(request), projectId, range);
   });
 
   app.get('/projects/:projectId/sync', async (request) => {
     const { projectId } = request.params as { projectId: string };
+    validateUuidParam(projectId, 'projectId');
     const query = z.object({ cursor: z.string().optional(), limit: z.coerce.number().int().min(1).max(1000).default(200) }).parse(request.query);
     return workItems.syncFeed(await authenticatedUserId(request), projectId, query.cursor, query.limit);
   });
 
   app.get('/work-items/:workItemId/dependencies', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     return workItems.listDependencies(await authenticatedUserId(request), params.workItemId);
   });
 
   app.put('/work-items/:workItemId/dependencies', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     const body = dependencySchema.parse(request.body);
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.setDependencies(userId, params.workItemId, body.dependsOn));
   });
 
   app.post('/work-items/:workItemId/milestone', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     return workItems.assignMilestone(await authenticatedUserId(request), params.workItemId, milestoneAssignmentSchema.parse(request.body).milestoneId);
   });
 
   app.get('/projects/:projectId/milestones', async (request) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     return workItems.listMilestones(await authenticatedUserId(request), params.projectId);
   });
 
   app.post('/projects/:projectId/milestones', async (request, reply) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     const [milestone] = await workItems.createMilestone(await authenticatedUserId(request), params.projectId, milestoneSchema.parse(request.body));
     return reply.code(201).send(milestone);
   });
 
   app.get('/projects/:projectId/health', async (request) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     return workItems.health(await authenticatedUserId(request), params.projectId);
   });
 
   app.delete('/work-items/:workItemId', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     const body = workItemDeleteSchema.parse(request.body);
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.remove(userId, params.workItemId, body.version));
   });
 
   app.get('/work-items/:workItemId/events', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     return workItems.history(await authenticatedUserId(request), params.workItemId);
   });
 
   app.post('/work-items/:workItemId/report', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     const body = workItemReportSchema.parse(request.body);
     const { version, ...report } = body;
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId }, body, (service, userId) => service.report(userId, params.workItemId, version, report));
@@ -658,6 +741,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.post('/work-items/:workItemId/accept', async (request) => {
     const params = request.params as { workItemId: string };
+    validateUuidParam(params.workItemId, 'workItemId');
     const body = workItemAcceptanceSchema.parse(request.body);
     const { version, ...acceptance } = body;
     return mutate(request, await authenticatedUserId(request), { taskId: params.workItemId, reviewer: true }, body, (service, userId) => service.accept(userId, params.workItemId, version, acceptance));
@@ -665,12 +749,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.get('/projects/:projectId/events', async (request) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     await workItems.assertViewer(await authenticatedUserId(request), params.projectId);
     return workItems.events(params.projectId);
   });
 
   app.get('/projects/:projectId/events/stream', async (request, reply) => {
     const params = request.params as { projectId: string };
+    validateUuidParam(params.projectId, 'projectId');
     await workItems.assertViewer(await authenticatedUserId(request), params.projectId);
     reply.hijack();
     reply.raw.writeHead(200, {

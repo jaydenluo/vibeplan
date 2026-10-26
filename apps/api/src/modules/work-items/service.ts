@@ -388,7 +388,25 @@ export class WorkItemService {
     await this.requireContributor(userId, item.projectId, true);
     const [log] = await this.database.insert(workItemWorkLogs).values({ workItemId, userId, hours: String(input.hours), content: input.content, workDate: input.workDate }).returning();
     const total = await this.database.select({ hours: workItemWorkLogs.hours }).from(workItemWorkLogs).where(and(eq(workItemWorkLogs.workItemId, workItemId), isNull(workItemWorkLogs.revokedAt)));
-    await this.database.update(workItems).set({ actualHours: total.reduce((sum, row) => sum + Number(row.hours), 0).toFixed(2), updatedAt: this.now(), version: item.version + 1 }).where(and(eq(workItems.id, workItemId), eq(workItems.version, item.version)));
+    const newActualHours = total.reduce((sum, row) => sum + Number(row.hours), 0).toFixed(2);
+
+    // Use version check to prevent race condition on concurrent work log additions
+    const result = await this.database.update(workItems)
+      .set({ actualHours: newActualHours, updatedAt: this.now(), version: item.version + 1 })
+      .where(and(eq(workItems.id, workItemId), eq(workItems.version, item.version)))
+      .returning({ id: workItems.id });
+
+    // If version conflict, recalculate from all logs (another log was added concurrently)
+    if (result.length === 0) {
+      const allLogs = await this.database.select({ hours: workItemWorkLogs.hours })
+        .from(workItemWorkLogs)
+        .where(and(eq(workItemWorkLogs.workItemId, workItemId), isNull(workItemWorkLogs.revokedAt)));
+      const correctTotal = allLogs.reduce((sum, row) => sum + Number(row.hours), 0).toFixed(2);
+      await this.database.update(workItems)
+        .set({ actualHours: correctTotal, updatedAt: this.now() })
+        .where(eq(workItems.id, workItemId));
+    }
+
     await this.recordEvent(item.projectId, item.id, userId, 'work_log', { ...input, logId: log.id });
     return { projectId: item.projectId, log: { ...log, hours: Number(log.hours) } };
   }
@@ -415,7 +433,25 @@ export class WorkItemService {
         version: version + 1, updatedAt: this.now(),
       }).where(and(eq(workItemWorkLogs.id, logId), eq(workItemWorkLogs.version, version))).returning();
       const logs = await service.database.select().from(workItemWorkLogs).where(and(eq(workItemWorkLogs.workItemId, workItemId), isNull(workItemWorkLogs.revokedAt)));
-      await service.database.update(workItems).set({ actualHours: logs.reduce((n, row) => n + Number(row.hours), 0).toFixed(2), version: item.version + 1, updatedAt: this.now() }).where(eq(workItems.id, workItemId));
+      const newActualHours = logs.reduce((n, row) => n + Number(row.hours), 0).toFixed(2);
+
+      // Add version check to prevent race condition on concurrent corrections
+      const updated = await service.database.update(workItems)
+        .set({ actualHours: newActualHours, version: item.version + 1, updatedAt: this.now() })
+        .where(and(eq(workItems.id, workItemId), eq(workItems.version, item.version)))
+        .returning({ id: workItems.id });
+
+      // If version conflict, recalculate from current logs
+      if (updated.length === 0) {
+        const allLogs = await service.database.select({ hours: workItemWorkLogs.hours })
+          .from(workItemWorkLogs)
+          .where(and(eq(workItemWorkLogs.workItemId, workItemId), isNull(workItemWorkLogs.revokedAt)));
+        const correctTotal = allLogs.reduce((sum, row) => sum + Number(row.hours), 0).toFixed(2);
+        await service.database.update(workItems)
+          .set({ actualHours: correctTotal, updatedAt: this.now() })
+          .where(eq(workItems.id, workItemId));
+      }
+
       await service.recordEvent(item.projectId, workItemId, userId, 'work_log_corrected', { reason: patch.reason, before, after: log });
       return { id: item.id, projectId: item.projectId, status: item.status, log: { ...log, hours: Number(log.hours) } };
     }, 'work_log_corrected');
@@ -632,7 +668,6 @@ export class WorkItemService {
     for (const id of deletedIds) await appendSyncChange(this.database, existing.projectId, id, 'delete');
     for (const id of ancestors) await appendSyncChange(this.database, existing.projectId, id, 'upsert');
     await this.invalidateRelated(existing.projectId, [...deletedIds, ...ancestors]);
-    this.eventHub?.publish({ projectId: existing.projectId, workItemId: existing.id, action: 'deleted', payload: { deletedIds } });
     return { id: existing.id, projectId: existing.projectId, status: 'deleted' as const, deletedIds };
   }
 

@@ -6,12 +6,33 @@ import { migrate } from './db/migrate.js';
 import { AuthService, type Mailer } from './modules/auth/service.js';
 import { AccessService } from './modules/access/service.js';
 import { PlatformAdminService } from './modules/admin/service.js';
+import { EmailDeliveryError } from './modules/mail/mailer.js';
 import { WorkItemService } from './modules/work-items/service.js';
 
 class TestMailer implements Mailer {
+  isConfigured(): boolean { return true; }
+  assertConfigured(): void {}
+
   async sendRegistrationCode(): Promise<void> {}
   async sendVerification(): Promise<void> {}
   async sendPasswordReset(): Promise<void> {}
+}
+
+class UnavailableMailer implements Mailer {
+  isConfigured(): boolean { return false; }
+  assertConfigured(): void { throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.'); }
+
+  async sendRegistrationCode(): Promise<void> {
+    throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.');
+  }
+
+  async sendVerification(): Promise<void> {
+    throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.');
+  }
+
+  async sendPasswordReset(): Promise<void> {
+    throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.');
+  }
 }
 
 describe('api app', () => {
@@ -157,7 +178,7 @@ describe('api app', () => {
     await sqlClient`delete from organizations where id = ${organization.id}`;
   });
 
-  it('creates and confirms an organization billing order through HTTP', async () => {
+  it.each([{ planCode: 'team_10', amountCents: 48000 }, { planCode: 'personal', amountCents: 12800 }])('creates and confirms a $planCode billing order through HTTP', async ({ planCode, amountCents }) => {
     const access = new AccessService(db);
     const organization = await access.createOrganization(userId, `Billing API ${randomUUID()}`);
     const token = (await authService.login(email, password)).accessToken;
@@ -165,10 +186,10 @@ describe('api app', () => {
       method: 'POST',
       url: `/organizations/${organization.id}/billing/orders`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { planCode: 'team_10' },
+      payload: { planCode },
     });
     expect(created.statusCode).toBe(201);
-    expect(created.json()).toMatchObject({ amountCents: 48000, status: 'pending', provider: 'manual' });
+    expect(created.json()).toMatchObject({ amountCents, status: 'pending', provider: 'manual' });
     const confirmed = await app.inject({
       method: 'POST',
       url: `/organizations/${organization.id}/billing/orders/${created.json().id}/confirm`,
@@ -179,7 +200,7 @@ describe('api app', () => {
     expect(confirmed.json().status).toBe('paid');
     const summary = await app.inject({ method: 'GET', url: `/organizations/${organization.id}/billing`, headers: { authorization: `Bearer ${token}` } });
     expect(summary.statusCode).toBe(200);
-    expect(summary.json()).toMatchObject({ subscription: { planCode: 'team_10', status: 'active' }, policy: { canManageBilling: true } });
+    expect(summary.json()).toMatchObject({ subscription: { planCode, status: 'active' }, policy: { canManageBilling: true } });
     await sqlClient`delete from organizations where id = ${organization.id}`;
   });
 });
@@ -265,6 +286,24 @@ describe('api security configuration', () => {
       expect((await app.inject({ method: 'POST', url: '/auth/password/request', payload: resetPayload })).statusCode).toBe(429);
     } finally {
       await app.close();
+    }
+  });
+
+  it('reports unavailable mail delivery before issuing credentials', async () => {
+    const unavailableAuth = new AuthService(db, new UnavailableMailer(), { accessSecret: 'unavailable-mail-test' });
+    const unavailableApp = await buildApp({ authService: unavailableAuth });
+    try {
+      expect((await unavailableApp.inject({ method: 'GET', url: '/auth/config' })).json()).toMatchObject({ emailDeliveryConfigured: false });
+
+      const registration = await unavailableApp.inject({ method: 'POST', url: '/auth/register/request-code', payload: { email: `unavailable-${randomUUID()}@example.com` } });
+      expect(registration.statusCode).toBe(503);
+      expect(registration.json().error.code).toBe('EMAIL_DELIVERY_NOT_CONFIGURED');
+
+      const reset = await unavailableApp.inject({ method: 'POST', url: '/auth/password/request', payload: { email: `unavailable-${randomUUID()}@example.com` } });
+      expect(reset.statusCode).toBe(503);
+      expect(reset.json().error.code).toBe('EMAIL_DELIVERY_NOT_CONFIGURED');
+    } finally {
+      await unavailableApp.close();
     }
   });
 });

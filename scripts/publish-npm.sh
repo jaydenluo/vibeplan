@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/publish-npm.sh <X.Y.Z> [--login] [--otp <code>] [--registry <url>]
+Usage: scripts/publish-npm.sh [X.Y.Z] [--login] [--otp <code>] [--registry <url>]
 
 Builds and publishes @vibeplan/templates first, then @vibeplan/cli. npm login or a
 configured npm token is required before running this command. If NPM_TOKEN is
@@ -12,25 +12,27 @@ set, it is used through a temporary npm user config and removed on exit.
 
 Use --login to run npm's interactive username/password login before publishing.
 Use --otp or NPM_OTP to provide the one-time password required by npm 2FA.
+
+When the version is omitted, the patch component is incremented from the
+matching versions in both package.json files. An explicit version synchronizes
+both packages to that version.
 EOF
 }
 
-is_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+is_semver() { [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; }
 
 if [[ $# -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
   usage
   exit 0
 fi
-if [[ $# -lt 1 ]]; then
-  usage >&2
-  exit 1
-fi
-
-version="$1"
-shift
-if ! is_semver "$version"; then
-  echo "ERROR: release version must use X.Y.Z: $version" >&2
-  exit 1
+version=""
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  version="$1"
+  shift
+  if ! is_semver "$version"; then
+    echo "ERROR: release version must use X.Y.Z: $version" >&2
+    exit 1
+  fi
 fi
 
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -135,18 +137,43 @@ if [[ -n "${NPM_TOKEN:-}" ]]; then
   echo "Verified npm token for $npm_account."
 fi
 
-# Version changes belong to the reviewed release, not an authenticated publish.
-node - "$version" <<'NODE'
+# Select and persist the release version only after npm authentication succeeds.
+version=$(node - "$version" <<'NODE'
 const fs = require('node:fs');
-for (const file of ['packages/templates/package.json', 'apps/cli/package.json']) {
-  if (JSON.parse(fs.readFileSync(file, 'utf8')).version !== process.argv[2]) {
-    throw new Error(`${file} must already use release version ${process.argv[2]}`);
-  }
+const files = ['packages/templates/package.json', 'apps/cli/package.json'];
+const packages = files.map((file) => ({ file, data: JSON.parse(fs.readFileSync(file, 'utf8')) }));
+const requested = process.argv[2] || '';
+const current = packages.map(({ data }) => data.version);
+const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+if (current.some((value) => !semver.test(value))) {
+  throw new Error(`package versions must use X.Y.Z: ${current.join(', ')}`);
 }
+let version = requested;
+if (!version) {
+  if (current[0] !== current[1]) {
+    throw new Error(`package versions must match before automatic increment: ${current.join(', ')}`);
+  }
+  const [major, minor, patch] = current[0].split('.').map(Number);
+  version = `${major}.${minor}.${patch + 1}`;
+}
+if (!semver.test(version)) throw new Error(`release version must use X.Y.Z: ${version}`);
+for (const { file, data } of packages) {
+  data.version = version;
+  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+}
+process.stdout.write(version);
 NODE
+)
+echo "Preparing @vibeplan/templates@$version and @vibeplan/cli@$version."
 
-pnpm build
-bash "$root_dir/scripts/verify-npm-package.sh" "$version"
+run_release_step() {
+  if "$@"; then return 0; fi
+  echo "ERROR: release preparation failed. Version $version is recorded in both package.json files; retry with: scripts/publish-npm.sh $version" >&2
+  exit 1
+}
+
+run_release_step pnpm build
+run_release_step bash "$root_dir/scripts/verify-npm-package.sh" "$version"
 
 publish_args=(--access public --no-git-checks)
 if [[ -n "$npm_registry" ]]; then
@@ -168,4 +195,3 @@ if ! pnpm --filter @vibeplan/cli publish "${publish_args[@]}"; then
   exit 1
 fi
 echo "Published @vibeplan/templates@$version and @vibeplan/cli@$version."
-bash "$root_dir/scripts/verify-npm-package.sh" "$version" "${npm_registry:-https://registry.npmjs.org}"

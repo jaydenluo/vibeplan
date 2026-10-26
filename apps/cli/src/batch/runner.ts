@@ -65,7 +65,9 @@ export async function executePlan(plan: BatchPlan, previous: RunState | undefine
     state.pending = { taskId: id, action, mutationId }; save();
     const updated = await operation(task.version, mutationId);
     state.tasks[id].version = updated.version; current.set(id, updated);
-    delete state.pending; save(); return updated;
+    delete state.pending;
+    save();
+    return updated;
   }
   async function approve(id: string, task: BatchTask, review: AgentResult) {
     for (const criterion of task.acceptanceItems.filter((c) => c.required)) {

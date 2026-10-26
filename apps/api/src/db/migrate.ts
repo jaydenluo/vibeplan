@@ -69,6 +69,13 @@ export async function migrate(): Promise<void> {
 }
 
 if (process.argv[1]?.endsWith('/migrate.ts') || process.argv[1]?.endsWith('/migrate.js')) {
-  await migrate();
-  await sqlClient.end();
+  try {
+    await migrate();
+    console.log('✅ Database migration completed successfully');
+  } catch (error) {
+    console.error('❌ Database migration failed:', error);
+    process.exitCode = 1;
+  } finally {
+    await sqlClient.end();
+  }
 }

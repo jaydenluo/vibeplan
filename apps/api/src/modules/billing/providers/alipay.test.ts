@@ -1,11 +1,12 @@
-import { createSign, generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { createSign, createVerify, generateKeyPairSync } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AlipayProvider } from './alipay.js';
 import { BillingProviderError } from './types.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const publicPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+afterEach(() => vi.useRealTimers());
 
 function sign(payload: Record<string, string>): string {
   const content = Object.keys(payload).filter((key) => key !== 'sign' && key !== 'sign_type' && payload[key] !== '').sort().map((key) => `${key}=${payload[key]}`).join('&');
@@ -22,8 +23,29 @@ describe('AlipayProvider', () => {
     expect(request).toMatchObject({ provider: 'alipay', orderNo: 'VP202610130001', formAction: 'https://openapi.alipay.com/gateway.do' });
     expect(request.formFields).toMatchObject({ app_id: '2026101300000000', method: 'alipay.trade.page.pay', sign_type: 'RSA2' });
     expect(JSON.parse(request.formFields.biz_content)).toMatchObject({ out_trade_no: 'VP202610130001', total_amount: '480.00' });
+    const requestContent = Object.entries(request.formFields).filter(([key, value]) => key !== 'sign' && value !== '').sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join('&');
+    const verifier = createVerify('RSA-SHA256');
+    verifier.update(requestContent);
+    expect(verifier.verify(publicPem, request.formFields.sign, 'base64')).toBe(true);
     const payload = { ...request.formFields };
     expect(provider.verifyNotification({ ...payload, out_trade_no: 'VP202610130001', trade_no: '202610132200000001', total_amount: '480.00', trade_status: 'TRADE_SUCCESS', seller_id: '2088000000000000', sign: sign({ ...payload, out_trade_no: 'VP202610130001', trade_no: '202610132200000001', total_amount: '480.00', trade_status: 'TRADE_SUCCESS', seller_id: '2088000000000000' }) })).toMatchObject({ amountCents: 48000 });
+  });
+
+  it('uses Beijing time for Alipay request timestamps', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-26T01:02:03Z'));
+    const request = await provider.createPayment({ orderNo: 'VP-TIME', subject: 'Personal', amountCents: 12800, notifyUrl: 'https://example.test/notify', returnUrl: 'https://example.test/return' });
+    expect(request.formFields.timestamp).toBe('2026-10-26 09:02:03');
+  });
+
+  it('normalizes escaped PEM newlines from deployment environment variables', async () => {
+    const escaped = new AlipayProvider({ appId: 'app', privateKey: privatePem.replaceAll('\n', '\\n'), publicKey: publicPem.replaceAll('\n', '\\n'), gateway: 'https://openapi.alipay.com/gateway.do' });
+    await expect(escaped.createPayment({ orderNo: 'VP-PEM', subject: 'Personal', amountCents: 12800, notifyUrl: 'https://example.test/notify', returnUrl: 'https://example.test/return' })).resolves.toHaveProperty('formFields.sign');
+  });
+
+  it.each(['1.001', '1e2', '-1.00', '', '0.00'])('rejects non-payment amount %j without rounding it into an order amount', (total_amount) => {
+    const payload = { app_id: '2026101300000000', seller_id: '2088000000000000', out_trade_no: 'VP1', trade_no: 'TRADE1', total_amount, trade_status: 'TRADE_SUCCESS' };
+    expect(() => provider.verifyNotification({ ...payload, sign: sign(payload) })).toThrow(BillingProviderError);
   });
 
   it('rejects invalid signature, app, seller, and amount data', () => {

@@ -47,6 +47,12 @@ describe('apiRequest authentication recovery', () => {
     expect(messages).toEqual([{ text: '请求失败，请稍后重试。', tone: 'error' }]);
   });
 
+  it('shows a Chinese message when email delivery is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, 503, { error: { code: 'EMAIL_DELIVERY_NOT_CONFIGURED', message: 'Email delivery is not configured.' } })));
+
+    await expect(apiRequest('/auth/register/request-code', { method: 'POST', body: '{}' })).rejects.toThrow('邮件服务尚未配置，请联系管理员。');
+  });
+
   it('publishes a success message for write requests but not reads', async () => {
     const messages: Array<{ text: string; tone: string }> = [];
     window.addEventListener(messageEvent, ((event: Event) => { messages.push((event as CustomEvent<{ text: string; tone: string }>).detail); }) as EventListener);

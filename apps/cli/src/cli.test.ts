@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { decideInitAction, type ProjectConfig } from './config.js';
 import { buildTaskCreatePayload, type TaskCreateOptions } from './commands/task-create.js';
 import { mergeAgentsInstructions } from './commands/init.js';
-import { ApiClient, normalizeServer } from './api-client.js';
+import { ApiClient, ApiRequestError, normalizeServer } from './api-client.js';
+import { cliErrorMessage } from './errors.js';
 import { codexSkillPath, installCodexSkill, managedSkillTemplate } from './commands/install-codex.js';
 import { codexSkillInstructions } from '@vibeplan/templates';
 import { cliVersion } from './version.js';
@@ -75,6 +76,19 @@ describe('server URL', () => {
       headers: {},
     }));
     vi.unstubAllGlobals();
+  });
+});
+
+describe('CLI error messages', () => {
+  it('explains when the server cannot be reached', () => {
+    expect(cliErrorMessage(new TypeError('fetch failed'))).toContain('无法连接 Vibe Plan 服务端');
+    expect(cliErrorMessage(new TypeError('fetch failed'))).toContain('vibeplan status');
+  });
+
+  it('explains when the server returns an internal error', () => {
+    const message = cliErrorMessage(new ApiRequestError(500, 'Internal server error.'));
+    expect(message).toContain('Vibe Plan 服务端暂时不可用');
+    expect(message).toContain('HTTP 500');
   });
 });
 

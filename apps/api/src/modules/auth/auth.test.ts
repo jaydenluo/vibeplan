@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from '../../db/migrate.js';
 import { db, sqlClient } from '../../db/client.js';
+import { EmailDeliveryError } from '../mail/mailer.js';
 import { AuthService, AuthError, type Mailer } from './service.js';
 
 class TestMailer implements Mailer {
   verificationTokens: string[] = [];
   registrationCodes: string[] = [];
+
+  isConfigured(): boolean { return true; }
+  assertConfigured(): void {}
 
   async sendRegistrationCode(_email: string, code: string): Promise<void> {
     this.registrationCodes.push(code);
@@ -18,6 +22,23 @@ class TestMailer implements Mailer {
 
   async sendPasswordReset(_email: string, token: string): Promise<void> {
     this.verificationTokens.push(token);
+  }
+}
+
+class UnavailableMailer implements Mailer {
+  isConfigured(): boolean { return false; }
+  assertConfigured(): void { throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.'); }
+
+  async sendRegistrationCode(): Promise<void> {
+    throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.');
+  }
+
+  async sendVerification(): Promise<void> {
+    throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.');
+  }
+
+  async sendPasswordReset(): Promise<void> {
+    throw new EmailDeliveryError('EMAIL_DELIVERY_NOT_CONFIGURED', 'Email delivery is not configured.');
   }
 }
 
@@ -43,7 +64,7 @@ describe('email authentication', () => {
     await sqlClient`delete from users where id = ${registered.id}`;
   });
 
-  it('renews the default refresh session for 30 days after each use', async () => {
+  it('renews the default refresh session for 90 days after each use', async () => {
     const mailer = new TestMailer();
     let now = new Date('2026-10-02T00:00:00.000Z');
     const auth = new AuthService(db, mailer, { accessSecret: `test-${randomUUID()}`, now: () => now });
@@ -52,11 +73,11 @@ describe('email authentication', () => {
     await auth.requestRegistrationCode(email);
     const registered = await auth.register(email, 'a secure password', 'Sliding User', mailer.registrationCodes.at(-1)!);
     const initialSession = await auth.login(email, 'a secure password');
-    expect(initialSession.refreshExpiresInSeconds).toBe(30 * 24 * 60 * 60);
+    expect(initialSession.refreshExpiresInSeconds).toBe(90 * 24 * 60 * 60);
 
     now = new Date(now.getTime() + 29 * 24 * 60 * 60 * 1000);
     const renewedSession = await auth.refresh(initialSession.refreshToken);
-    expect(renewedSession.refreshExpiresInSeconds).toBe(30 * 24 * 60 * 60);
+    expect(renewedSession.refreshExpiresInSeconds).toBe(90 * 24 * 60 * 60);
 
     now = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     await expect(auth.refresh(renewedSession.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
@@ -115,6 +136,28 @@ describe('email authentication', () => {
     expect(registered.email).toBe(email);
     expect(mailer.registrationCodes).toHaveLength(0);
     await sqlClient`delete from users where id = ${registered.id}`;
+  });
+
+  it('does not persist a registration code when email delivery is unavailable', async () => {
+    const email = `unavailable-code-${randomUUID()}@example.com`;
+    const auth = new AuthService(db, new UnavailableMailer(), { accessSecret: 'unavailable-code-test' });
+
+    await expect(auth.requestRegistrationCode(email)).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_NOT_CONFIGURED' });
+    const [{ count }] = await sqlClient<{ count: string }[]>`select count(*)::text as count from registration_codes where email = ${email}`;
+
+    expect(count).toBe('0');
+  });
+
+  it('does not persist a password reset token when email delivery is unavailable', async () => {
+    const email = `unavailable-reset-${randomUUID()}@example.com`;
+    const auth = new AuthService(db, new UnavailableMailer(), { accessSecret: 'unavailable-reset-test', emailVerificationRequired: false });
+    const user = await auth.register(email, 'old secure password', 'Reset User');
+
+    await expect(auth.requestPasswordReset(email)).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_NOT_CONFIGURED' });
+    const [{ count }] = await sqlClient<{ count: string }[]>`select count(*)::text as count from email_tokens where user_id = ${user.id} and purpose = 'reset_password'`;
+
+    expect(count).toBe('0');
+    await sqlClient`delete from users where id = ${user.id}`;
   });
 
   it('atomically rotates a refresh token once and reports the configured access TTL', async () => {

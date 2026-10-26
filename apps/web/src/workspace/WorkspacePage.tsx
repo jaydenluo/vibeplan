@@ -84,7 +84,12 @@ export function WorkspacePage({ inviteToken, onInviteHandled, onLogout }: { invi
   const [projectEventsLoading, setProjectEventsLoading] = useState(false);
   const [projectEventsError, setProjectEventsError] = useState('');
   useEffect(() => {
-    apiRequest<User>('/auth/me').then(setUser).catch(() => undefined);
+    apiRequest<User>('/auth/me')
+      .then(setUser)
+      .catch((error) => {
+        console.error('Failed to fetch user:', error);
+        // User will see login UI if auth fails
+      });
   }, []);
   useEffect(() => {
     let active = true;
@@ -202,7 +207,7 @@ export function WorkspacePage({ inviteToken, onInviteHandled, onLogout }: { invi
     <div className="workspace-layout">
       <aside className={`sidebar${sidebarExpanded ? ' expanded' : ''}`}>
         <div className="sidebar-brand"><span className="sidebar-logo" aria-hidden="true">V</span>{sidebarExpanded && <span className="sidebar-brand-copy"><span className="eyebrow">CODEX WORKSPACE</span><span className="sidebar-brand-product"><strong>Vibe Plan</strong><span className="app-version">v{appVersion}</span></span></span>}</div>
-        {user && <ProfileMenu user={user} organizations={organizations} organizationId={organizationId} onSelectOrganization={(id) => { setOrganizationId(id); navigateToView('teams'); }} onCreateOrganization={() => { setOrganizationId(''); navigateToView('teams'); setCreateOrganizationRequest((value) => value + 1); }} onProfileUpdated={setUser} onLogout={onLogout} />}
+        {user && <ProfileMenu user={user} organizations={organizations} organizationId={organizationId} onSelectOrganization={(id) => { setOrganizationId(id); navigateToView('teams'); }} onCreateOrganization={() => { setOrganizationId(''); navigateToView('teams'); setCreateOrganizationRequest((value) => value + 1); }} onOpenBilling={openBilling} onProfileUpdated={setUser} onLogout={onLogout} />}
         <nav className="sidebar-nav" aria-label="主导航">
           <button type="button" aria-label="总览" title="总览" className={view === 'overview' ? 'selected' : ''} onClick={() => navigateToView('overview')}><LayoutDashboard className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>总览</span>}</button>
           <button type="button" aria-label="项目管理" title="项目管理" className={view === 'projects' ? 'selected' : ''} onClick={() => navigateToView('projects')}><FolderKanban className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>项目管理</span>}</button>

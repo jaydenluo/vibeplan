@@ -265,7 +265,11 @@ export class AccessService {
     const [user] = await this.database.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
     const [invitation] = await this.database.select().from(organizationInvitations).where(and(eq(organizationInvitations.id, invitationId), eq(organizationInvitations.status, 'pending'))).limit(1);
     if (!user || !invitation || invitation.email !== user.email) throw new AccessError('NOT_FOUND', 'Invitation does not exist or is not accessible.');
-    const [updated] = await this.database.update(organizationInvitations).set({ status: 'rejected', updatedAt: new Date() }).where(eq(organizationInvitations.id, invitation.id)).returning();
+    const [updated] = await this.database.update(organizationInvitations)
+      .set({ status: 'rejected', updatedAt: new Date() })
+      .where(and(eq(organizationInvitations.id, invitation.id), eq(organizationInvitations.status, 'pending')))
+      .returning();
+    if (!updated) throw new AccessError('NOT_FOUND', 'Invitation does not exist or is not accessible.');
     return updated;
   }
 

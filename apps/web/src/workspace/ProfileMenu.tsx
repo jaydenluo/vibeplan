@@ -11,10 +11,11 @@ type Props = {
   onSelectOrganization: (id: string) => void;
   onCreateOrganization: () => void;
   onProfileUpdated?: (user: User) => void;
+  onOpenBilling?: (organizationId: string) => void;
   onLogout?: () => void;
 };
 
-export function ProfileMenu({ user, organizations, organizationId, onSelectOrganization, onCreateOrganization, onProfileUpdated, onLogout }: Props) {
+export function ProfileMenu({ user, organizations, organizationId, onSelectOrganization, onCreateOrganization, onProfileUpdated, onOpenBilling, onLogout }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -64,6 +65,7 @@ export function ProfileMenu({ user, organizations, organizationId, onSelectOrgan
     </button>
     {open && <div className="profile-popover" role="menu">
       <button className="profile-menu-item" type="button" role="menuitem" onClick={() => { setProfileOpen(true); setOpen(false); }}>个人资料</button>
+      <button className="profile-menu-item" type="button" role="menuitem" disabled={!organizationId || !onOpenBilling} onClick={() => { onOpenBilling?.(organizationId); setOpen(false); }}>订阅与账单</button>
       <button className="profile-menu-item" type="button" role="menuitem" onClick={() => { setDeviceOpen(true); setDeviceApproved(false); setOpen(false); }}>CLI 设备授权</button>
       <button className="profile-menu-item profile-logout" type="button" role="menuitem" onClick={() => { setOpen(false); void logout(); }}>退出登录</button>
       <div className="profile-menu-section"><span>当前组织</span>{organizations.length === 0 ? <p>还没有组织</p> : organizations.map((item) => <button className={`profile-menu-item organization-option${item.id === organizationId ? ' selected' : ''}`} type="button" role="menuitem" key={item.id} onClick={() => { onSelectOrganization(item.id); setOpen(false); }}><span>{item.name}</span>{item.id === organizationId && <small>当前</small>}</button>)}</div>
