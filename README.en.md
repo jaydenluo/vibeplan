@@ -2,7 +2,11 @@
 
 [中文](README.md) · English
 
-Vibe Plan is a self-hosted collaboration platform for AI-assisted development. It provides web-based project management and task collaboration, plus the `vibeplan` CLI for local Git projects.
+**Manage your task progress with AI.**
+
+Vibe Plan is a task management platform for AI-assisted development. It connects Codex and Claude Code to your project tasks, so AI can help create tasks, understand requirements, implement changes, update progress, and report changed files and test results.
+
+Use the web interface to manage projects, tasks, progress, reviews, and execution records, and view member workloads, actual work hours, task completion, and code contribution statistics. The `vibeplan` CLI keeps your local Git project in sync with the web platform, giving you visibility into what AI is working on and what it has delivered.
 
 > [!TIP]
 > **🤝 Sponsor · [TokenFLS GPT API Gateway](https://www.tokenfls.com)**
@@ -15,6 +19,8 @@ Vibe Plan is a self-hosted collaboration platform for AI-assisted development. I
 
 ## Project screenshots
 
+Explore project management, task tracking, and collaboration analytics in the web interface:
+
 <p align="center">
   <img src="projects.png" alt="Project management" width="32%" />
   <img src="projects2.png" alt="Task management" width="32%" />
@@ -25,7 +31,7 @@ Use online: [https://vibeplan.szxinjin.cn](https://vibeplan.szxinjin.cn) · Free
 
 ## License
 
-This project may be used, modified, and privately deployed by individuals and organizations for personal or internal use. Commercial operation, sale, paid hosting, and commercial SaaS or managed services are prohibited. See [LICENSE](LICENSE) for the full terms. Contact the copyright holder for commercial licensing.
+Individuals and organizations may use, modify, and privately deploy this project for free. Commercial operation, sale, commercial hosting, or commercial SaaS use of this project or modified versions is prohibited. See [LICENSE](LICENSE) for the full terms. Contact the copyright holder for commercial licensing.
 
 ## Quick start
 
@@ -73,7 +79,7 @@ Start synchronization in the same project directory:
 vibeplan start
 ```
 
-Once synchronization is running, ask Codex or Claude Code to add a task to Vibe Plan or implement `TASK_ID`. See [user-guide.md](user-guide.md) for the full guide.
+Once you see the synchronization logs, tell Codex or Claude Code: “Add the tasks above to Vibe Plan” or “Implement Vibe Plan task TASK_ID.” See [user-guide.md](user-guide.md) for the full guide (in Chinese).
 
 Common daemon commands:
 
@@ -141,3 +147,53 @@ scripts/build-and-push-tencent.sh --publish-npm
 ```
 
 Deployment files are in `deploy/server/`.
+
+## Command reference
+
+Start local development:
+
+```bash
+./start.sh
+```
+
+Build and publish images, with an automatic patch increment or an explicit version:
+
+```bash
+scripts/build-and-push-tencent.sh
+scripts/build-and-push-tencent.sh 0.1.10
+```
+
+Publish npm packages with an automatic patch increment or an explicit version:
+
+```bash
+scripts/publish-npm.sh
+scripts/publish-npm.sh 0.1.10
+```
+
+Set `NPM_TOKEN` in `scripts/tencent-credentials.env`. If it expires or stops working, generate a new token on npm and update the file.
+
+Install the latest CLI:
+
+```bash
+npm install --global @vibeplan/cli@latest
+```
+
+Create a project on the website, copy the initialization command from its project card, and run it in your local Git project. Then install the Codex rules and start synchronization:
+
+```bash
+vibeplan init --project-id PROJECT_ID
+vibeplan install-codex
+vibeplan start
+```
+
+To replace existing Codex rules when needed:
+
+```bash
+vibeplan install-codex --force
+```
+
+## Join the community
+
+Scan the QR code with WeChat to add us as a contact. Include “vibePlan” in your friend request to receive an invitation to the community group.
+
+<img src="docs/images/wechat-qr.jpg" alt="WeChat contact QR code for the Vibe Plan community" width="240" />

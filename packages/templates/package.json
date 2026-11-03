@@ -1,7 +1,7 @@
 {
   "name": "@vibeplan/templates",
   "private": false,
-  "version": "0.1.11",
+  "version": "0.1.13",
   "description": "Codex instructions and templates for Vibe Plan",
   "publishConfig": {
     "access": "public"

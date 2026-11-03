@@ -158,7 +158,8 @@ scripts/build-and-push-tencent.sh --publish-npm
 scripts/build-and-push-tencent.sh
 scripts/build-and-push-tencent.sh 0.1.10
 
-# 发布npm (token 不行就要换) 在 scripts/tencent-credentials.env 中填写 NPM_TOKEN (会过期，过期之后，去官方，再拿一下。)
+# 发布npm 
+(token 不行就要换) 在 scripts/tencent-credentials.env 中填写 NPM_TOKEN (会过期，过期之后，去官方，再拿一下。)
 # 不加版本号会自增
 scripts/publish-npm.sh 
 scripts/publish-npm.sh 0.1.10
@@ -175,3 +176,10 @@ vibeplan install-codex --force
 - 终端运行
 vibeplan start
 
+
+
+## 加入交流群
+
+微信扫码添加好友，备注「vibePlan」，邀请你加入交流群。
+
+<img src="docs/images/wechat-qr.jpg" alt="微信交流群联系方式" width="240" />
