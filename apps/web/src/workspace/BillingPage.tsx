@@ -21,8 +21,7 @@ type Props = {
 type Plan = { code: BillingPlanCode; name: string; priceCents: number | null; memberLimit: number | null; description: string };
 
 const plans: Plan[] = [
-  { code: 'free', name: '个人免费', priceCents: 0, memberLimit: 1, description: '个人使用，免费组织合计最多 50 个项目。' },
-  { code: 'personal', name: '个人版', priceCents: 12_800, memberLimit: 1, description: '个人使用，项目数量不限。' },
+  { code: 'free', name: '免费版', priceCents: 0, memberLimit: 3, description: '个人和小型协作使用，免费组织合计最多 50 个项目。' },
   { code: 'team_10', name: '团队 10 人', priceCents: 48_000, memberLimit: 10, description: '适合小型协作团队，项目数量不限。' },
   { code: 'team_30', name: '团队 30 人', priceCents: 128_000, memberLimit: 30, description: '适合稳定的研发与产品协作。' },
   { code: 'team_100', name: '团队 100 人', priceCents: 368_000, memberLimit: 100, description: '适合多团队协作与跨项目管理。' },
@@ -173,7 +172,7 @@ export function BillingPage({ organizationId, organizationName, onBack }: Props)
 
     {pendingOrder?.status === 'pending' && <section className="billing-pending" aria-live="polite"><strong>{pendingOrder.provider === 'manual' ? '测试支付订单' : '等待付款'}</strong><span>订单号：{pendingOrder.orderNo}。支付完成后此页面会自动更新。</span>{pendingOrder.provider === 'manual' && canManageBilling && <button className="secondary" type="button" onClick={() => void confirmManualPayment()}>确认测试付款</button>}{pendingOrder.provider === 'alipay' && canManageBilling && <button className="primary" type="button" disabled={paymentBusy} onClick={() => void resumePayment()}>继续支付</button>}</section>}
 
-    <section className="billing-section"><div className="billing-section-heading"><div><h3>订阅套餐</h3><p>个人免费自动生效，无需续费。付费套餐按年主动续费，不会自动扣款。降级会保存为下一次续费选择。</p></div></div><div className="billing-plan-grid">
+    <section className="billing-section"><div className="billing-section-heading"><div><h3>订阅套餐</h3><p>免费版自动生效，无需续费。付费套餐按年主动续费，不会自动扣款。降级会保存为下一次续费选择。</p></div></div><div className="billing-plan-grid">
       {plans.map((plan) => {
         const isCurrent = plan.code === currentPlan.code;
         const isCustom = plan.code === 'custom';

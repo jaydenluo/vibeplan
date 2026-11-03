@@ -85,14 +85,14 @@ describe('organization, team, and project access', () => {
     await sqlClient`delete from users where id in (${owner.id}, ${invitee.id}, ${applicant.id}, ${linkInvitee[0].id})`;
   });
 
-  it('prevents free organizations from inviting or adding another member', async () => {
+  it('allows free organizations to invite members within the three-seat limit', async () => {
     const suffix = randomUUID();
     const [owner] = await db.insert(users).values({ email: `free-owner-${suffix}@example.com`, passwordHash: 'test' }).returning();
     const [invitee] = await db.insert(users).values({ email: `free-invitee-${suffix}@example.com`, passwordHash: 'test' }).returning();
     const access = new AccessService(db);
     const organization = await access.createOrganization(owner.id, `Free ${suffix}`);
 
-    await expect(access.inviteMember(owner.id, organization.id, invitee.email)).rejects.toMatchObject({ code: 'BILLING_FREE_PLAN_MEMBERSHIP_LOCKED' });
+    await expect(access.inviteMember(owner.id, organization.id, invitee.email)).resolves.toBeTruthy();
     await sqlClient`delete from users where id in (${owner.id}, ${invitee.id})`;
   });
 

@@ -171,14 +171,14 @@ describe('api app', () => {
       statusDistribution: expect.arrayContaining([{ status: 'ready', count: 1 }]),
       projects: [expect.objectContaining({ id: project.id, name: '组织总览项目', progress: 0, risk: 'stable' })],
     });
-    const personal = await app.inject({ method: 'GET', url: `/organizations/${organization.id}/my-work`, headers: { authorization: `Bearer ${token}` } });
-    expect(personal.statusCode).toBe(200);
-    expect(personal.json()).toMatchObject({ inProgress: expect.any(Array), ready: expect.any(Array), blocked: expect.any(Array), inReview: expect.any(Array) });
-    expect(personal.json()).toHaveProperty('next');
+    const myWork = await app.inject({ method: 'GET', url: `/organizations/${organization.id}/my-work`, headers: { authorization: `Bearer ${token}` } });
+    expect(myWork.statusCode).toBe(200);
+    expect(myWork.json()).toMatchObject({ inProgress: expect.any(Array), ready: expect.any(Array), blocked: expect.any(Array), inReview: expect.any(Array) });
+    expect(myWork.json()).toHaveProperty('next');
     await sqlClient`delete from organizations where id = ${organization.id}`;
   });
 
-  it.each([{ planCode: 'team_10', amountCents: 48000 }, { planCode: 'personal', amountCents: 12800 }])('creates and confirms a $planCode billing order through HTTP', async ({ planCode, amountCents }) => {
+  it.each([{ planCode: 'team_10', amountCents: 48000 }])('creates and confirms a $planCode billing order through HTTP', async ({ planCode, amountCents }) => {
     const access = new AccessService(db);
     const organization = await access.createOrganization(userId, `Billing API ${randomUUID()}`);
     const token = (await authService.login(email, password)).accessToken;

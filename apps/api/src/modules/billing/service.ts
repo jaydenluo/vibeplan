@@ -201,6 +201,6 @@ export class BillingService {
   private async requireOwner(userId: string, organizationId: string) { if (await this.requireMember(userId, organizationId) !== 'owner') throw new BillingError('BILLING_OWNER_REQUIRED', 'Only the organization owner can manage billing.', 403); }
   private orderNumber(): string { return `VP${this.now().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`; }
   private upgradeAmount(targetPrice: number, currentPrice: number, periodStart: Date, periodEnd: Date, now: Date): number { const duration = Math.max(1, periodEnd.getTime() - periodStart.getTime()); return Math.max(0, targetPrice - Math.floor(currentPrice * (Math.max(0, periodEnd.getTime() - now.getTime()) / duration))); }
-  private denialMessage(code: string): string { return ({ BILLING_ORGANIZATION_READ_ONLY: '订阅已过宽限期，请续费后继续编辑。', BILLING_FREE_PROJECT_LIMIT_REACHED: '免费项目额度已用完，请升级套餐后继续创建项目。', BILLING_FREE_PLAN_MEMBERSHIP_LOCKED: '免费组织仅允许所有者本人使用，请升级套餐后邀请成员。', BILLING_SEAT_LIMIT_EXCEEDED: '组织成员数超过当前套餐上限，请升级套餐或减少成员后继续编辑。' } as Record<string, string>)[code] ?? '当前订阅不允许此操作。'; }
+  private denialMessage(code: string): string { return ({ BILLING_ORGANIZATION_READ_ONLY: '订阅已过宽限期，请续费后继续编辑。', BILLING_FREE_PROJECT_LIMIT_REACHED: '免费版项目额度已用完，请升级套餐后继续创建项目。', BILLING_SEAT_LIMIT_EXCEEDED: '组织成员数超过当前套餐上限，请升级套餐或减少成员后继续编辑。' } as Record<string, string>)[code] ?? '当前订阅不允许此操作。'; }
   private redactedPayload(payload: Record<string, string>): Record<string, unknown> { const { sign: _sign, ...safe } = payload; return safe; }
 }

@@ -32,7 +32,6 @@ const webErrorMessages: Record<string, string> = {
   SYNC_RESET_REQUIRED: '本地同步记录已失效，请重新同步。',
   BILLING_ORGANIZATION_READ_ONLY: '该组织当前为只读状态，请续费或调整用量后再操作。',
   BILLING_FREE_PROJECT_LIMIT_REACHED: '免费版项目数量已达上限，请升级套餐后继续创建。',
-  BILLING_FREE_PLAN_MEMBERSHIP_LOCKED: '免费版暂不支持邀请成员，请升级套餐后继续操作。',
   BILLING_SEAT_LIMIT_EXCEEDED: '组织成员数量已达套餐上限，请升级套餐后继续邀请。',
   BILLING_ORGANIZATION_NOT_FOUND: '组织不存在或您无权访问。',
   BILLING_OWNER_REQUIRED: '只有组织所有者可以管理订阅与账单。',
@@ -139,7 +138,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, allowR
 
 export { apiBase };
 
-export type BillingPlanCode = 'free' | 'personal' | 'team_10' | 'team_30' | 'team_100' | 'enterprise_1000' | 'custom';
+export type BillingPlanCode = 'free' | 'team_10' | 'team_30' | 'team_100' | 'enterprise_1000' | 'custom';
 export type BillingSubscriptionStatus = 'free' | 'active' | 'grace' | 'expired' | 'scheduled_change' | 'manual';
 export type BillingOrderStatus = 'pending' | 'paid' | 'scheduled' | 'closed' | 'failed' | 'refunded';
 

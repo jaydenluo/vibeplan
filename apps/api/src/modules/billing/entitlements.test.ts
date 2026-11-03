@@ -37,15 +37,20 @@ describe('EntitlementService', () => {
     await sqlClient`delete from users where id = ${owner.id}`;
   });
 
-  it('keeps free organizations single-member and counts paid organization seats once', async () => {
+  it('allows three free members and counts paid organization seats once', async () => {
     const suffix = randomUUID();
     const [owner] = await db.insert(users).values({ email: `seat-owner-${suffix}@example.com`, passwordHash: 'test' }).returning();
-    const [member] = await db.insert(users).values({ email: `seat-member-${suffix}@example.com`, passwordHash: 'test' }).returning();
+    const members = await db.insert(users).values([1, 2, 3].map((index) => ({ email: `seat-member-${index}-${suffix}@example.com`, passwordHash: 'test' }))).returning();
     const [organization] = await db.insert(organizations).values({ name: 'Seats', slug: `seats-${suffix}` }).returning();
     await db.insert(organizationMemberships).values({ userId: owner.id, organizationId: organization.id, role: 'owner' });
 
     const freePolicy = await new EntitlementService(db).getOrganizationPolicy(organization.id);
-    expect(freePolicy.canAddMember).toBe(false);
+    expect(freePolicy.memberUsage).toEqual({ used: 1, limit: 3 });
+    expect(freePolicy.canAddMember).toBe(true);
+    await db.insert(organizationMemberships).values(members.slice(0, 2).map((member) => ({ userId: member.id, organizationId: organization.id, role: 'member' })));
+    expect((await new EntitlementService(db).getOrganizationPolicy(organization.id)).canAddMember).toBe(false);
+    await db.insert(organizationMemberships).values({ userId: members[2].id, organizationId: organization.id, role: 'member' });
+    expect((await new EntitlementService(db).getOrganizationPolicy(organization.id)).canAddMember).toBe(false);
 
     await db.insert(organizationSubscriptions).values({
       organizationId: organization.id,
@@ -59,11 +64,11 @@ describe('EntitlementService', () => {
       graceEndsAt: new Date('2027-01-08T00:00:00Z'),
       provider: 'manual',
     });
-    await db.insert(organizationMemberships).values({ userId: member.id, organizationId: organization.id, role: 'member' });
     const paidPolicy = await new EntitlementService(db).getOrganizationPolicy(organization.id);
-    expect(paidPolicy.memberUsage).toEqual({ used: 2, limit: 10 });
+    expect(paidPolicy.memberUsage).toEqual({ used: 4, limit: 10 });
     expect(paidPolicy.canAddMember).toBe(true);
-    await sqlClient`delete from users where id in (${owner.id}, ${member.id})`;
+    await sqlClient`delete from users where id = ${owner.id}`;
+    for (const member of members) await sqlClient`delete from users where id = ${member.id}`;
   });
 
   it('allows writes in grace and denies them after the grace period', async () => {

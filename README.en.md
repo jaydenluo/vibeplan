@@ -4,6 +4,15 @@
 
 Vibe Plan is a self-hosted collaboration platform for AI-assisted development. It provides web-based project management and task collaboration, plus the `vibeplan` CLI for local Git projects.
 
+> [!TIP]
+> **🤝 Sponsor · [TokenFLS GPT API Gateway](https://www.tokenfls.com)**
+>
+> **More room to build with AI. Less spent on API calls. No reduced model intelligence. No overload.**
+>
+> Limited developer access keeps the focus on service quality and stability. **RMB ¥1 buys US $1 in usage credits**, with low model billing multipliers to help your development budget go further.
+>
+> [Explore TokenFLS models and pricing →](https://www.tokenfls.com)
+
 ## Project screenshots
 
 <p align="center">

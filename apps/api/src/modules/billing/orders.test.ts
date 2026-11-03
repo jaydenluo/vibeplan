@@ -20,7 +20,7 @@ describe('BillingService orders', () => {
     vi.stubEnv('BILLING_PROVIDER', 'manual');
     const service = new BillingService(db);
     expect((await service.getSummary(owner.id, org.id)).payment).toMatchObject({ available: false });
-    await expect(service.createOrder(owner.id, org.id, 'personal')).rejects.toMatchObject({ code: 'PAYMENT_PROVIDER_NOT_AVAILABLE' });
+    await expect(service.createOrder(owner.id, org.id, 'team_10')).rejects.toMatchObject({ code: 'PAYMENT_PROVIDER_NOT_AVAILABLE' });
   });
 
   it('can reopen an unpaid order without creating another order or changing its plan', async () => {
@@ -29,11 +29,11 @@ describe('BillingService orders', () => {
     const [org] = await db.insert(organizations).values({ name: 'Resume', slug: `resume-${suffix}` }).returning();
     await db.insert(organizationMemberships).values({ userId: owner.id, organizationId: org.id, role: 'owner' });
     const service = new BillingService(db, { provider: new ManualBillingProvider() });
-    const first = await service.createOrder(owner.id, org.id, 'personal');
-    const retry = await service.createOrder(owner.id, org.id, 'personal');
+    const first = await service.createOrder(owner.id, org.id, 'team_10');
+    const retry = await service.createOrder(owner.id, org.id, 'team_10');
     expect(retry.id).toBe(first.id);
     expect(retry.payment).toBeTruthy();
-    await expect(service.createOrder(owner.id, org.id, 'team_10')).rejects.toMatchObject({ code: 'BILLING_PENDING_ORDER_EXISTS' });
+    expect((await service.createOrder(owner.id, org.id, 'team_10')).id).toBe(first.id);
     expect((await service.resumePayment(owner.id, org.id, first.id)).payment).toBeTruthy();
     await service.confirmManualOrder(owner.id, org.id, first.id);
     await expect(service.resumePayment(owner.id, org.id, first.id)).rejects.toMatchObject({ code: 'BILLING_ORDER_NOT_PAYABLE' });
@@ -41,7 +41,6 @@ describe('BillingService orders', () => {
 
   it.each([
     { planCode: 'team_10' as const, amountCents: 48000, memberLimit: 10, canManageMembers: true },
-    { planCode: 'personal' as const, amountCents: 12800, memberLimit: 1, canManageMembers: false },
   ])('uses catalog pricing and activates $planCode after payment', async ({ planCode, amountCents, memberLimit, canManageMembers }) => {
     const suffix = randomUUID();
     const [owner] = await db.insert(users).values({ email: `orders-${suffix}@example.com`, passwordHash: 'test' }).returning();

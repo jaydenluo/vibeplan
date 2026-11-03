@@ -7,7 +7,6 @@ export type BillingEntitlementCode =
   | 'BILLING_ORGANIZATION_NOT_FOUND'
   | 'BILLING_ORGANIZATION_READ_ONLY'
   | 'BILLING_FREE_PROJECT_LIMIT_REACHED'
-  | 'BILLING_FREE_PLAN_MEMBERSHIP_LOCKED'
   | 'BILLING_SEAT_LIMIT_EXCEEDED';
 
 export class BillingEntitlementError extends Error {
@@ -77,18 +76,16 @@ export class EntitlementService {
       : { used: await this.freeProjectCountForOwner(owner.userId, currentTime), limit: getBillingPlan('free').projectLimit };
     // Free-plan membership mutations are blocked separately. Legacy organizations that
     // already contain members must remain usable after this feature is deployed.
-    const overSeats = planCode !== 'free' && plan.seatLimit !== null && memberUsage.used > plan.seatLimit;
+    const overSeats = plan.seatLimit !== null && memberUsage.used > plan.seatLimit;
     const stateBlocked = state === 'read_only';
     const canWrite = !stateBlocked && !overSeats;
     const canCreateProject = canWrite && (paidOrganization || projectUsage.used < (projectUsage.limit ?? Infinity));
-    const canAddMember = canWrite && paidOrganization && (plan.seatLimit === null || memberUsage.used < plan.seatLimit);
+    const canAddMember = canWrite && (plan.seatLimit === null || memberUsage.used < plan.seatLimit);
     const denialCode = stateBlocked
       ? 'BILLING_ORGANIZATION_READ_ONLY'
       : overSeats
         ? 'BILLING_SEAT_LIMIT_EXCEEDED'
-        : !paidOrganization
-          ? 'BILLING_FREE_PLAN_MEMBERSHIP_LOCKED'
-          : !canCreateProject
+        : !canCreateProject
             ? 'BILLING_FREE_PROJECT_LIMIT_REACHED'
             : null;
 
@@ -132,7 +129,7 @@ export class EntitlementService {
       if (existing) return policy;
     }
     if (!policy.canAddMember) {
-      const code = policy.state === 'free' ? 'BILLING_FREE_PLAN_MEMBERSHIP_LOCKED' : policy.denialCode ?? 'BILLING_SEAT_LIMIT_EXCEEDED';
+      const code = policy.denialCode ?? 'BILLING_SEAT_LIMIT_EXCEEDED';
       throw new BillingEntitlementError(code, 'This organization cannot add another member under its current plan.');
     }
     return policy;

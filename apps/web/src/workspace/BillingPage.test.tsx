@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 it('recovers an unpaid Alipay order after returning to the billing page and resumes checkout', async () => {
-  const pending = { id: 'alipay-order', orderNo: 'VP-ALIPAY', planCode: 'personal' as const, amountCents: 12800, status: 'pending' as const, provider: 'alipay' };
+  const pending = { id: 'alipay-order', orderNo: 'VP-ALIPAY', planCode: 'team_10' as const, amountCents: 48000, status: 'pending' as const, provider: 'alipay' };
   const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => {});
   const fetchMock = vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => ({ ...summary, orders: [pending], payment: { provider: 'alipay', available: true, testMode: false } }) })
@@ -46,41 +46,26 @@ function mockFetch(payload = summary) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
 }
 
-it('offers the personal plan for 128 yuan per year and submits its plan code', async () => {
-  const fetchMock = vi.fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ ...summary, subscription: { planCode: 'free', status: 'free' }, orders: [] }) })
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'personal-order', status: 'pending', planCode: 'personal', amountCents: 12800, provider: 'manual' }) });
+it('shows the free plan without an annual checkout', async () => {
+  const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ ...summary, subscription: { planCode: 'free', status: 'free' }, orders: [] }) });
   vi.stubGlobal('fetch', fetchMock);
   render(<BillingPage organizationId="org-1" organizationName="个人组织" />);
-  const upgrade = await screen.findByRole('button', { name: '升级至个人版' });
-  const card = upgrade.closest('article')!;
-  expect(within(card).getByText('¥128/年')).toBeTruthy();
-  expect(within(card).getByText('最多 1 名组织成员')).toBeTruthy();
-  expect(within(card).getByText('个人使用，项目数量不限。')).toBeTruthy();
-  fireEvent.click(upgrade);
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/billing\/orders$/), expect.objectContaining({ method: 'POST', body: JSON.stringify({ planCode: 'personal' }) })));
-});
-
-it('allows personal subscribers to renew annually while keeping the free plan automatic', async () => {
-  mockFetch({ ...summary, subscription: { ...summary.subscription, planCode: 'personal' }, policy: { ...summary.policy, memberUsage: 1, memberLimit: 1 } });
-  render(<BillingPage organizationId="org-1" organizationName="个人组织" />);
-  const renewal = await screen.findByRole('button', { name: '续费一年' });
-  expect(within(renewal.closest('article')!).getByRole('heading', { name: '个人版' })).toBeTruthy();
-  expect(screen.getByText('项目不限数量')).toBeTruthy();
-  expect(screen.getByText('自动生效，无需续费')).toBeTruthy();
+  await screen.findByRole('region', { name: '当前订阅' });
+  expect(screen.getByRole('heading', { name: '免费版' })).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: '个人版' })).toBeNull();
 });
 
 it('automatically includes the lifetime free plan without a renewal checkout', async () => {
-  mockFetch({ ...summary, subscription: { planCode: 'free', status: 'free' }, policy: { ...summary.policy, memberUsage: 1, memberLimit: 1, projectUsage: 11, projectLimit: 50 }, orders: [] });
+  mockFetch({ ...summary, subscription: { planCode: 'free', status: 'free' }, policy: { ...summary.policy, memberUsage: 3, memberLimit: 3, projectUsage: 11, projectLimit: 50 }, orders: [] });
   render(<BillingPage organizationId="org-1" organizationName="个人组织" />);
   await screen.findByRole('region', { name: '当前订阅' });
   expect(screen.getByText('11 / 50 个')).toBeTruthy();
-  const freePlan = screen.getByRole('heading', { name: '个人免费' }).closest('article')!;
+  const freePlan = screen.getByRole('heading', { name: '免费版' }).closest('article')!;
   expect(within(freePlan).getByText('自动生效，无需续费')).toBeTruthy();
   expect(within(freePlan).getByText('长期免费')).toBeTruthy();
   expect(within(freePlan).queryByRole('button')).toBeNull();
   expect(screen.queryByRole('button', { name: '续费一年' })).toBeNull();
-  expect(screen.getByText('个人使用，免费组织合计最多 50 个项目。')).toBeTruthy();
+  expect(screen.getByText('个人和小型协作使用，免费组织合计最多 50 个项目。')).toBeTruthy();
 });
 
 it('shows the organization plan, seat usage, and payment history', async () => {
