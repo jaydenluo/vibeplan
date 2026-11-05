@@ -390,7 +390,7 @@ describe('web app', () => {
 
   it('shows project tasks and nested subtasks in the project management page', async () => {
     const tasks = [
-      { id: 'task-1', title: '主任务', type: 'feature', status: 'in_progress', priority: 'P1', progress: 40, dueDate: '2026-09-30', description: '实现任务详情', acceptanceCriteria: ['功能可正常使用', '通过验收检查'], parentId: null, version: 1 },
+      { id: 'task-1', title: '主任务', type: 'feature', status: 'in_progress', priority: 'P1', progress: 40, dueDate: '2026-09-30', estimate: 22, riskFlags: ['overdue'], description: '实现任务详情', acceptanceCriteria: ['功能可正常使用', '通过验收检查'], parentId: null, version: 1 },
       { id: 'task-2', title: '子任务', type: 'bug', status: 'done', priority: 'P2', progress: 100, parentId: 'task-1', version: 1 },
     ];
     const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -451,12 +451,24 @@ describe('web app', () => {
     expect(mainMeta?.querySelector('.task-meta-progress')?.classList.contains('progress-mid')).toBe(true);
     expect(mainMeta?.querySelector('.task-meta-progress')?.textContent).toBe('功能开发40%');
     expect(mainMeta?.classList.contains('no-wrap')).toBe(true);
+    expect(mainMeta?.querySelector('.task-meta-estimate')?.textContent).toBe('预估 22 天');
+    expect(mainMeta?.querySelector('.task-meta-children')?.textContent).toBe('1 个子任务');
+    expect(mainMeta?.querySelector('.task-meta-risk')?.textContent).toBe('已逾期');
+    expect(mainTaskButton.querySelector('.task-tree-submeta')).toBeNull();
+    const metadataOrder = Array.from(mainMeta?.children ?? []).map((node) => node.className);
+    expect(metadataOrder[0]).toContain('task-meta-status');
+    expect(metadataOrder[1]).toBe('task-meta-divider');
+    expect(metadataOrder[2]).toContain('task-meta-estimate');
+    expect(metadataOrder[3]).toContain('task-meta-children');
+    expect(metadataOrder[4]).toContain('task-meta-risk');
+    expect(metadataOrder[5]).toContain('task-meta-progress');
     fireEvent.doubleClick(mainTaskButton);
     expect(screen.getByRole('tab', { name: '任务详情' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: '主任务' })).toBeTruthy();
     fireEvent.doubleClick(mainTaskButton);
     expect(screen.getByRole('tab', { name: '甘特图' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(taskDirectory).getAllByText('9月30日')).toHaveLength(2);
+    expect(within(taskDirectory).getByText('9月9日')).toBeTruthy();
+    expect(within(taskDirectory).getByText('9月30日')).toBeTruthy();
     expect(within(taskDirectory).queryByText(/开始 9月30日/)).toBeNull();
     expect(within(taskDirectory).queryByText(/结束 9月30日/)).toBeNull();
     expect(document.querySelector('.gantt-resize-handle.start')).toBeTruthy();
@@ -474,18 +486,18 @@ describe('web app', () => {
     expect((screen.getByLabelText('批量日期') as HTMLInputElement).disabled).toBe(true);
     const ganttCalendar = document.querySelector('.gantt-calendar') as HTMLElement;
     const initialColumnStyle = ganttCalendar.style.gridTemplateColumns;
-    expect((document.querySelector('.gantt-bar') as HTMLButtonElement).title).toBe('主任务 · 40% · 1 天');
-    expect(ganttCalendar.querySelectorAll('span')).toHaveLength(15);
+    expect((document.querySelector('.gantt-bar') as HTMLButtonElement).title).toBe('主任务 · 40% · 22 天');
+    expect(ganttCalendar.querySelectorAll('span')).toHaveLength(36);
     expect(initialColumnStyle).toContain('38px');
     const ganttScroll = document.querySelector('.gantt-scroll') as HTMLElement;
     Object.defineProperty(ganttScroll, 'clientWidth', { configurable: true, value: 760 });
     fireEvent(window, new Event('resize'));
-    await waitFor(() => expect(ganttCalendar.querySelectorAll('span')).toHaveLength(20));
+    await waitFor(() => expect(ganttCalendar.querySelectorAll('span')).toHaveLength(36));
     Object.defineProperty(ganttScroll, 'clientWidth', { configurable: true, value: 1520 });
     fireEvent(window, new Event('resize'));
     await waitFor(() => expect(ganttCalendar.querySelectorAll('span')).toHaveLength(40));
     const wideColumnStyle = ganttCalendar.style.gridTemplateColumns;
-    expect((document.querySelector('.gantt-bar') as HTMLButtonElement).style.width).toBe('2.5%');
+    expect((document.querySelector('.gantt-bar') as HTMLButtonElement).style.width).toBe('55.00000000000001%');
     expect((screen.getByRole('button', { name: '放大' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: '缩小' }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByRole('button', { name: '还原缩放' })).toBeTruthy();
@@ -552,7 +564,7 @@ describe('web app', () => {
     expect(screen.getByRole('heading', { name: '主任务' })).toBeTruthy();
     expect(document.querySelector('.task-detail-summary-title .priority')?.textContent).toBe('P1');
     expect(document.querySelector('.task-detail-summary-meta')?.textContent).toContain('类型：功能开发');
-    expect(document.querySelector('.task-detail-summary-meta')?.textContent).toContain('预估工时：未设置');
+    expect(document.querySelector('.task-detail-summary-meta')?.textContent).toContain('预估工时：22天');
     expect(document.querySelector('.task-summary-secondary-meta')).toBeNull();
     expect(screen.getAllByText('40%').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('tab', { name: '验收' }));
@@ -638,6 +650,33 @@ describe('web app', () => {
     })));
     expect(screen.getByText('不通过')).toBeTruthy();
     expect((screen.getByLabelText('验收评论 健康检查返回 200') as HTMLInputElement).value).toBe('接口返回 500');
+  });
+
+  it('blocks per-criterion acceptance until an active task enters review', async () => {
+    const task = {
+      id: 'task-1', title: '进行中验收任务', type: 'feature', status: 'in_progress', priority: 'P1', progress: 60, parentId: null, version: 3,
+      acceptanceCriteria: ['健康检查返回 200'],
+      acceptanceItems: [{ id: '11111111-1111-4111-8111-111111111111', text: '健康检查返回 200', required: true, status: 'unverified', comment: '', evidence: [], reviewedBy: null, reviewedAt: null }],
+    };
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith('/teams/team-1/members') || path.endsWith('/projects/project-1/events') || path.endsWith('/work-items/task-1/events')) return { ok: true, json: async () => [] };
+      if (path.endsWith('/work-items/task-1/permissions')) return { ok: true, json: async () => ({ canReview: true, canContribute: true }) };
+      return { ok: true, json: async () => [task] };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ProjectManagementPage projects={[{ id: 'project-1', name: '项目一', slug: 'project-1', teamId: 'team-1' }]} activeProjectId="project-1" onBack={vi.fn()} onSelectProject={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '进行中验收任务 进行中 · feature · P1' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: '进行中验收任务 进行中 · feature · P1' }));
+    fireEvent.click(screen.getByRole('tab', { name: '任务详情' }));
+    fireEvent.click(screen.getByRole('tab', { name: '验收' }));
+
+    await waitFor(() => expect(screen.getByText('无法验收：任务当前为「进行中」。验收仅支持「待审核」状态；请先提交成功执行报告。')).toBeTruthy());
+    expect((screen.getByRole('button', { name: '提交验收项 健康检查返回 200' }).closest('fieldset') as HTMLFieldSetElement).disabled).toBe(true);
+    const acceptanceRequestsBeforeClick = fetchMock.mock.calls.filter(([url, init]) => String(url).includes('/acceptance-items/') && (init as RequestInit | undefined)?.method === 'PATCH').length;
+    fireEvent.click(screen.getByRole('button', { name: '提交验收项 健康检查返回 200' }));
+    expect(fetchMock.mock.calls.filter(([url, init]) => String(url).includes('/acceptance-items/') && (init as RequestInit | undefined)?.method === 'PATCH')).toHaveLength(acceptanceRequestsBeforeClick);
   });
 
   it('opens an edit form from a task row menu with the current task values', async () => {

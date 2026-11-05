@@ -5,6 +5,9 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
+# The usage guide imports repository documents at build time.
+COPY user-guide.md LICENSE ./
+COPY docs/task-execution.md docs/billing.md docs/admin-console.md ./docs/
 ARG VITE_APP_VERSION=dev
 ARG VITE_BUILD_COMMIT=unknown
 ARG VITE_API_URL=/api

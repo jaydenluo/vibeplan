@@ -3,7 +3,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TaskAcceptanceActions } from './TaskAcceptanceActions.js';
 import { apiRequest, showMessage } from '../api/client.js';
-vi.mock('../api/client.js', () => ({ apiRequest: vi.fn(), showMessage: vi.fn() }));
+vi.mock('../api/client.js', () => ({
+  acceptanceStatusGuidance: () => '无法验收：任务当前为「进行中」。验收仅支持「待审核」状态；请先提交成功执行报告。',
+  apiRequest: vi.fn(),
+  showMessage: vi.fn(),
+}));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 it('requires a rejection reason and submits the current version', async () => {
@@ -26,6 +30,17 @@ it('does not expose approval controls to a contributor', async () => {
   render(<TaskAcceptanceActions item={{ id: 'task', status: 'in_review', version: 4 }} onUpdated={vi.fn()} />);
   await waitFor(() => expect(screen.getByText('等待有审核权限的成员验收。')).toBeTruthy());
   expect(screen.queryByRole('button', { name: '批准完成' })).toBeNull();
+});
+
+it('explains how an active task enters acceptance instead of showing approval controls', async () => {
+  vi.mocked(apiRequest).mockResolvedValue({ canReview: true, canContribute: true });
+  render(<TaskAcceptanceActions item={{ id: 'task', status: 'in_progress', version: 4 }} onUpdated={vi.fn()} />);
+
+  await waitFor(() => expect(screen.getByText('无法验收：任务当前为「进行中」。验收仅支持「待审核」状态；请先提交成功执行报告。')).toBeTruthy());
+
+  expect(screen.queryByRole('button', { name: '批准完成' })).toBeNull();
+  expect(vi.mocked(apiRequest)).toHaveBeenCalledWith('/work-items/task/permissions');
+  expect(vi.mocked(apiRequest).mock.calls.some(([path]) => String(path).endsWith('/accept'))).toBe(false);
 });
 
 it('keeps an unsuccessful acceptance visible without claiming completion', async () => {

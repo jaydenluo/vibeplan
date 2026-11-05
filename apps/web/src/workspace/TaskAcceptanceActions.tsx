@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiRequest, showMessage } from '../api/client.js';
+import { acceptanceStatusGuidance, apiRequest, showMessage } from '../api/client.js';
 import { TaskReportForm } from './TaskReportForm.js';
 
 type Task = { id: string; status: string; version?: number; acceptanceItems?: { id: string; text: string }[] };
@@ -49,6 +49,6 @@ export function TaskAcceptanceActions<T extends Task>({ item, onUpdated, mode = 
   return <section className="task-support-panel"><h4>交付与验收</h4>
     {item.status === 'in_review' && (permissions.canReview ? <><label>验收说明 / 退回原因<textarea aria-label="验收说明 / 退回原因" value={comment} onChange={(event) => setComment(event.target.value)} disabled={busy} placeholder="退回时必须说明需要修改的内容" /></label><div className="task-acceptance-actions"><button type="button" className="secondary" disabled={busy} onClick={() => void submit('rejected')}>退回修改</button><button type="button" className="primary" disabled={busy} onClick={() => void submit('approved')}>批准完成</button></div></> : <p>等待有审核权限的成员验收。</p>)}
     {item.status === 'done' && <p>已完成验收。若需更改验收标准或结论，请先重新打开任务。</p>}
-    {!['in_progress', 'blocked', 'in_review', 'done'].includes(item.status) && <p>任务开始执行后可提交验收。</p>}
+    {!['in_review', 'done'].includes(item.status) && <p>{acceptanceStatusGuidance(item.status)}</p>}
   </section>;
 }

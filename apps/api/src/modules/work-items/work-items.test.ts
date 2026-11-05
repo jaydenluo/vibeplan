@@ -4,7 +4,7 @@ import { db, sqlClient } from '../../db/client.js';
 import { migrate } from '../../db/migrate.js';
 import { users, teamMemberships } from '../../db/schema.js';
 import { AccessService } from '../access/service.js';
-import { WorkItemService, WorkItemConflictError } from './service.js';
+import { WorkItemService, WorkItemConflictError, WorkItemTransitionError } from './service.js';
 
 describe('work item service', () => {
   beforeAll(async () => {
@@ -73,6 +73,28 @@ describe('work item service', () => {
     const completed = await service.update(user.id, item.id, accepted.version, { progress: 20 });
     expect(completed.progress).toBe(100);
     expect((await service.history(user.id, item.id)).map((event) => event.action)).toContain('report');
+    await sqlClient`delete from organizations where id = ${organization.id}`;
+    await sqlClient`delete from users where id = ${user.id}`;
+  });
+
+  it('returns acceptance transition context when a task is not awaiting review', async () => {
+    const suffix = randomUUID();
+    const [user] = await db.insert(users).values({ email: `transition-${suffix}@example.com`, passwordHash: 'test' }).returning();
+    const access = new AccessService(db);
+    const organization = await access.createOrganization(user.id, `Transition Org ${suffix}`);
+    const team = await access.createTeam(user.id, organization.id, 'Core');
+    const project = await access.createProject(user.id, team.id, 'Transition Project');
+    const service = new WorkItemService(db);
+    const item = await service.create(user.id, project.id, {
+      title: 'Await review first', description: '', type: 'feature', status: 'ready', priority: 'P2', acceptanceCriteria: [], dueDate: null, estimate: 1,
+    });
+    const started = await service.update(user.id, item.id, item.version, { status: 'in_progress' });
+
+    await expect(service.accept(user.id, item.id, started.version, { decision: 'approved' })).rejects.toMatchObject({
+      name: 'WorkItemTransitionError',
+      details: { currentStatus: 'in_progress', allowedStatuses: ['in_review'], nextAction: 'submit_execution_report' },
+    } satisfies Partial<WorkItemTransitionError>);
+
     await sqlClient`delete from organizations where id = ${organization.id}`;
     await sqlClient`delete from users where id = ${user.id}`;
   });
@@ -182,6 +204,9 @@ describe('work item service', () => {
     const rolledUpParent = await service.get(user.id, parent.id);
     expect(rolledUpParent).toMatchObject({ dueDate: '2026-10-10', estimate: 6 });
     await expect(service.update(user.id, parent.id, rolledUpParent.version, { dueDate: '2026-10-12', estimate: 1 })).rejects.toThrow('derived from child');
+    await expect(service.update(user.id, parent.id, rolledUpParent.version, { dueDate: '2026-10-12', estimate: 1 })).rejects.toMatchObject({
+      details: { reason: 'parent_schedule_derived' },
+    });
     const movedChild = await service.update(user.id, child.id, child.version, { dueDate: '2026-10-04', estimate: 1 });
     expect(movedChild).toMatchObject({ dueDate: '2026-10-04', estimate: 1 });
     expect(await service.get(user.id, parent.id)).toMatchObject({ dueDate: '2026-10-10', estimate: 7 });

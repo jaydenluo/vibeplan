@@ -1,0 +1,53 @@
+{
+  "summary": "已修复验收流程中的泛化状态错误：API 返回受控的当前状态、允许状态和下一步动作；Web 端将其转为中文说明，并在非待审核状态提前禁用最终验收和逐项验收。",
+  "outcome": "success",
+  "changedFiles": [
+    "apps/api/src/app.ts",
+    "apps/api/src/app.test.ts",
+    "apps/api/src/modules/work-items/service.ts",
+    "apps/api/src/modules/work-items/work-items.test.ts",
+    "apps/web/src/api/client.ts",
+    "apps/web/src/api/client.test.ts",
+    "apps/web/src/app.test.tsx",
+    "apps/web/src/workspace/ProjectManagementPage.tsx",
+    "apps/web/src/workspace/TaskAcceptanceActions.tsx",
+    "apps/web/src/workspace/TaskAcceptanceActions.test.tsx"
+  ],
+  "tests": [
+    {
+      "command": "DATABASE_URL=postgres://vibe:vibe@localhost:55433/vibe_plan_test pnpm exec vitest run apps/api/src/modules/work-items/work-items.test.ts apps/api/src/app.test.ts --no-file-parallelism --exclude '.worktrees/**'",
+      "result": "26 tests passed",
+      "outcome": "passed",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec vitest run apps/web/src/api/client.test.ts apps/web/src/workspace/TaskAcceptanceActions.test.tsx apps/web/src/app.test.tsx --exclude '.worktrees/**'",
+      "result": "55 tests passed",
+      "outcome": "passed",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm lint",
+      "result": "passed",
+      "outcome": "passed",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm build",
+      "result": "passed",
+      "outcome": "passed",
+      "exitCode": 0
+    },
+    {
+      "command": "vibeplan check",
+      "result": "passed",
+      "outcome": "passed",
+      "exitCode": 0
+    }
+  ],
+  "commit": null,
+  "evidence": [],
+  "risks": [],
+  "remainingIssues": [],
+  "criterionResults": []
+}

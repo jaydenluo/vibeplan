@@ -233,7 +233,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return reply.code(409).send({ error: { code: 'CONFLICT', message: error.message } });
     }
     if (error instanceof WorkItemTransitionError) {
-      return reply.code(400).send({ error: { code: 'INVALID_TRANSITION', message: error.message } });
+      return reply.code(400).send({ error: { code: 'INVALID_TRANSITION', message: error.message, ...(error.details ? { details: error.details } : {}) } });
     }
     if (error instanceof WorkItemAccessError) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: error.message } });

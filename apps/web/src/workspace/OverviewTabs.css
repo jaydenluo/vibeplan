@@ -1,0 +1,8 @@
+.overview-tabs-layout { width: 100%; max-width: 1360px; min-width: 0; min-height: 100%; margin: 0 auto; }
+.overview-page-tabs { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 26px; margin-bottom: 22px; border-bottom: 1px solid #d8e0e5; background: #f3f5f7; }
+.overview-page-tabs > button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; min-height: 46px; padding: 10px 2px 12px; border: 0; border-bottom: 2px solid transparent; color: #71808a; background: transparent; font-size: 14px; }
+.overview-page-tabs > button[aria-selected="true"] { border-bottom-color: #2f657d; color: #2f657d; font-weight: 700; }
+.overview-page-tabs > button:hover { color: #244454; }
+.overview-page-tabs > button:focus-visible { outline: 2px solid #2f657d; outline-offset: -4px; border-radius: 4px; }
+.overview-tabs-layout > [role="tabpanel"] > .today-work { margin-top: 0; padding-top: 4px; border-top: 0; }
+@media (max-width: 760px) { .overview-page-tabs { gap: 22px; margin-bottom: 18px; } }

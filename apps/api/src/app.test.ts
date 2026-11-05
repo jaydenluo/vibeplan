@@ -126,6 +126,30 @@ describe('api app', () => {
     expect(browser.headers['set-cookie']).toBeTruthy();
   });
 
+  it('returns a specific reason when directly adjusting a parent schedule through HTTP', async () => {
+    const access = new AccessService(db);
+    const organization = await access.createOrganization(userId, `Schedule API ${randomUUID()}`);
+    try {
+      const team = await access.createTeam(userId, organization.id, 'Core');
+      const project = await access.createProject(userId, team.id, 'Schedule API Project');
+      const service = new WorkItemService(db);
+      const input = { description: '', type: 'feature' as const, status: 'ready' as const, priority: 'P2' as const, acceptanceCriteria: [], dueDate: '2026-11-12', estimate: 3 };
+      const parent = await service.create(userId, project.id, { ...input, title: 'Parent' });
+      await service.create(userId, project.id, { ...input, title: 'Child', parentId: parent.id });
+      const current = await service.get(userId, parent.id);
+      const token = (await authService.login(email, password)).accessToken;
+      const response = await app.inject({
+        method: 'PATCH', url: `/work-items/${parent.id}`, headers: { authorization: `Bearer ${token}` },
+        payload: { version: current.version, dueDate: '2026-11-14', estimate: 3 },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toMatchObject({ code: 'INVALID_TRANSITION', details: { reason: 'parent_schedule_derived' } });
+      expect(await service.get(userId, parent.id)).toMatchObject({ dueDate: current.dueDate, estimate: current.estimate, version: current.version });
+    } finally {
+      await sqlClient`delete from organizations where id = ${organization.id}`;
+    }
+  });
+
   it('records a criterion review through HTTP', async () => {
     const access = new AccessService(db);
     const organization = await access.createOrganization(userId, `Acceptance API ${randomUUID()}`);
@@ -140,11 +164,25 @@ describe('api app', () => {
     });
     expect(created.statusCode).toBe(201);
     const item = created.json();
-    const response = await app.inject({
+    const rejectedBeforeReview = await app.inject({
       method: 'PATCH',
       url: `/work-items/${item.id}/acceptance-items/${item.acceptanceItems[0].id}`,
       headers: { authorization: `Bearer ${token}` },
       payload: { version: item.version, status: 'passed', comment: '已通过健康检查', evidence: [{ label: 'health', url: 'https://example.com/health' }] },
+    });
+    expect(rejectedBeforeReview.statusCode).toBe(400);
+    expect(rejectedBeforeReview.json().error).toMatchObject({
+      code: 'INVALID_TRANSITION',
+      details: { currentStatus: 'ready', allowedStatuses: ['in_review'], nextAction: 'start_task' },
+    });
+    const service = new WorkItemService(db);
+    const started = await service.update(userId, item.id, item.version, { status: 'in_progress' });
+    const readyForReview = await service.report(userId, item.id, started.version, { summary: 'Ready for review', changedFiles: [], tests: [] });
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/work-items/${item.id}/acceptance-items/${item.acceptanceItems[0].id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { version: readyForReview.version, status: 'passed', comment: '已通过健康检查', evidence: [{ label: 'health', url: 'https://example.com/health' }] },
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().acceptanceItems[0]).toMatchObject({

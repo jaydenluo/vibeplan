@@ -9,13 +9,13 @@ Vibe Plan is a task management platform for AI-assisted development. It connects
 Use the web interface to manage projects, tasks, progress, reviews, and execution records, and view member workloads, actual work hours, task completion, and code contribution statistics. The `vibeplan` CLI keeps your local Git project in sync with the web platform, giving you visibility into what AI is working on and what it has delivered.
 
 > [!TIP]
-> **🤝 Sponsor · [TokenFLS GPT API Gateway](https://www.tokenfls.com)**
+> **🤝 Sponsor · [TokenFLS GPT API Gateway](https://www.tokenfls.com/register?aff=6C336V8Y23QX)**
 >
 > **More room to build with AI. Less spent on API calls. No reduced model intelligence. No overload.**
 >
 > Limited developer access keeps the focus on service quality and stability. **RMB ¥1 buys US $1 in usage credits**, with low model billing multipliers to help your development budget go further.
 >
-> [Explore TokenFLS models and pricing →](https://www.tokenfls.com)
+> [Explore TokenFLS models and pricing →](https://www.tokenfls.com/register?aff=6C336V8Y23QX)
 
 ## Project screenshots
 

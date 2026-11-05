@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, ClipboardCheck, FolderKanban, Kanban, LayoutDashboard, ShieldCheck, UsersRound } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BookOpen, ChevronDown, ClipboardCheck, FolderKanban, Kanban, LayoutDashboard, ShieldCheck, UsersRound } from 'lucide-react';
 import { apiRequest, getBillingSummary, getPlatformAdminMe, type BillingSummary, type PlatformAdminIdentity } from '../api/client.js';
 import { WorkItemBoard, type WorkItem } from './WorkItemBoard.js';
 import { WorkItemDetail } from './WorkItemDetail.js';
@@ -12,18 +12,18 @@ import { TeamDetailPage } from './TeamDetailPage.js';
 import { ApprovalsPage } from './ApprovalsPage.js';
 import { ProfileMenu } from './ProfileMenu.js';
 import { InviteAcceptanceModal } from './InviteAcceptanceModal.js';
-import { TodayWork } from './TodayWork.js';
-import { OrganizationOverview } from './OrganizationOverview.js';
+import { OverviewTabs } from './OverviewTabs.js';
 import { BillingPage } from './BillingPage.js';
 import { AdminConsolePage } from './AdminConsolePage.js';
 import { TaskActivity, TaskCodeRelations, type ProjectEvent } from './TaskProjectTabs.js';
 import { appVersion } from '../version.js';
+import { GuideEntry } from './usage-guide/GuideEntry.js';
 
 type Organization = { id: string; name: string; slug: string };
 type Team = { id: string; name: string; slug: string };
 type Project = { id: string; name: string; slug: string; teamId: string; description?: string | null; repositoryUrl?: string | null };
 type User = { id: string; email: string; displayName?: string | null };
-type View = 'overview' | 'teams' | 'projects' | 'approvals' | 'tasks' | 'billing' | 'admin';
+type View = 'overview' | 'teams' | 'projects' | 'approvals' | 'tasks' | 'billing' | 'admin' | 'guide';
 type TaskTab = 'board' | 'relations' | 'activity';
 type WorkspaceRoute = { view: View; projectId?: string; teamId?: string; organizationId?: string };
 
@@ -45,6 +45,7 @@ function routeFromLocation(): WorkspaceRoute {
   const segments = window.location.pathname.split('/').filter(Boolean).map((segment) => decodeURIComponent(segment));
   if (segments[0] === 'organizations' && segments[1] && segments[2] === 'billing') return { view: 'billing', organizationId: segments[1] };
   if (segments[0] === 'admin') return { view: 'admin' };
+  if (segments[0] === 'guide') return { view: 'guide' };
   if (segments[0] === 'projects' && segments[1]) return { view: 'projects', projectId: segments[1] };
   if (segments[0] === 'teams' && segments[1]) return { view: 'teams', teamId: segments[1] };
   if (segments[0] === 'teams') return { view: 'teams' };
@@ -59,6 +60,7 @@ function pathForView(view: View) {
 }
 
 export function WorkspacePage({ inviteToken, onInviteHandled, onLogout }: { inviteToken?: string | null; onInviteHandled?: () => void; onLogout?: () => void } = {}) {
+  const mainRef = useRef<HTMLElement>(null);
   const initialRoute = routeFromLocation();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -182,6 +184,7 @@ export function WorkspacePage({ inviteToken, onInviteHandled, onLogout }: { invi
     return () => { active = false; };
   }, [projectId, taskTab]);
   useEffect(() => { setTaskTab('board'); setProjectEvents([]); }, [projectId]);
+  useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view, teamDetailId, organizationId]);
 
   const navigateTo = (path: string) => {
     window.history.pushState({}, '', path);
@@ -214,13 +217,14 @@ export function WorkspacePage({ inviteToken, onInviteHandled, onLogout }: { invi
           <button type="button" aria-label="任务看板" title="任务看板" className={view === 'tasks' ? 'selected' : ''} onClick={() => navigateToView('tasks')}><Kanban className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>任务看板</span>}</button>
           <button type="button" aria-label="团队管理" title="团队管理" className={view === 'teams' ? 'selected' : ''} onClick={() => navigateToView('teams')}><UsersRound className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>团队管理</span>}</button>
           <button type="button" aria-label="待办审批" title="待办审批" className={view === 'approvals' ? 'selected' : ''} onClick={() => navigateToView('approvals')}><ClipboardCheck className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>待办审批</span>}</button>
+          <button type="button" aria-label="使用教程" title="使用教程" aria-current={view === 'guide' ? 'page' : undefined} className={view === 'guide' ? 'selected' : ''} onClick={() => navigateToView('guide')}><BookOpen className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>使用教程</span>}</button>
           {platformAdmin && <button type="button" aria-label="管理后台" title="管理后台" className={view === 'admin' ? 'selected' : ''} onClick={() => navigateToView('admin')}><ShieldCheck className="nav-icon" aria-hidden="true" strokeWidth={1.8} />{sidebarExpanded && <span>管理后台</span>}</button>}
         </nav>
         <button className="sidebar-toggle" type="button" aria-label={sidebarExpanded ? '收起菜单' : '展开菜单'} title={sidebarExpanded ? '收起菜单' : '展开菜单'} onClick={() => setSidebarExpanded((value) => !value)}><span aria-hidden="true">{sidebarExpanded ? '‹' : '›'}</span>{sidebarExpanded && <span>收起菜单</span>}</button>
       </aside>
-      <main className={`workspace-page${view === 'tasks' ? ' workspace-page-tasks' : ''}`}>
-      {view === 'overview' && <OrganizationOverview organizationId={organizationId} onOpenProjects={() => navigateToView('projects')} onOpenApprovals={() => navigateToView('approvals')} onOpenProject={openProject} />}
-      {view === 'overview' && <TodayWork organizationId={organizationId} onOpenTask={(projectId, taskId) => navigateTo(`/projects/${encodeURIComponent(projectId)}?task=${encodeURIComponent(taskId)}`)} />}
+      <main ref={mainRef} className={`workspace-page${view === 'tasks' ? ' workspace-page-tasks' : ''}`}>
+      {view === 'guide' && <GuideEntry />}
+      {view === 'overview' && <OverviewTabs organizationId={organizationId} onOpenProjects={() => navigateToView('projects')} onOpenApprovals={() => navigateToView('approvals')} onOpenProject={openProject} onOpenTask={(projectId, taskId) => navigateTo(`/projects/${encodeURIComponent(projectId)}?task=${encodeURIComponent(taskId)}`)} />}
       {view === 'teams' && teamDetail && <TeamDetailPage organizationId={organizationId} team={teamDetail} onBack={() => navigateToView('teams')} onChanged={refreshContext} />}
       {view === 'teams' && !teamDetail && <OrganizationPage organizations={organizations} organization={organization} teams={teams} onSelectOrganization={(id) => { setOrganizationId(id); navigateToView('teams'); }} onOpenTeam={openTeam} onOpenBilling={openBilling} memberManagementDisabledReason={billingSummary && !billingSummary.policy.canManageMembers ? billingSummary.policy.denialReason ?? '当前套餐不支持成员管理。' : undefined} onChanged={refreshContext} openCreateOrganization={createOrganizationRequest > 0} onCreateOrganizationHandled={() => setCreateOrganizationRequest(0)} />}
       {view === 'billing' && organization && <BillingPage organizationId={organization.id} organizationName={organization.name} onBack={() => navigateToView('teams')} />}

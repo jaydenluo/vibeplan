@@ -47,6 +47,42 @@ describe('apiRequest authentication recovery', () => {
     expect(messages).toEqual([{ text: '请求失败，请稍后重试。', tone: 'error' }]);
   });
 
+  it('explains the current status and next step for a rejected acceptance transition', async () => {
+    const messages: Array<{ text: string; tone: string }> = [];
+    window.addEventListener(messageEvent, ((event: Event) => { messages.push((event as CustomEvent<{ text: string; tone: string }>).detail); }) as EventListener);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, 400, {
+      error: {
+        code: 'INVALID_TRANSITION',
+        message: 'Only a task awaiting review can be accepted.',
+        details: {
+          currentStatus: 'in_progress',
+          allowedStatuses: ['in_review'],
+          nextAction: 'submit_execution_report',
+        },
+      },
+    })));
+
+    await expect(apiRequest('/work-items/task-1/accept', { method: 'POST', body: '{}' })).rejects.toThrow('无法验收：任务当前为「进行中」。验收仅支持「待审核」状态；请先提交成功执行报告。');
+
+    expect(messages).toEqual([{ text: '无法验收：任务当前为「进行中」。验收仅支持「待审核」状态；请先提交成功执行报告。', tone: 'error' }]);
+  });
+
+  it('explains why a parent schedule cannot be adjusted and how to change it', async () => {
+    const messages: Array<{ text: string; tone: string }> = [];
+    const listener = (event: Event) => { messages.push((event as CustomEvent<{ text: string; tone: string }>).detail); };
+    window.addEventListener(messageEvent, listener);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, 400, {
+      error: { code: 'INVALID_TRANSITION', message: 'Parent task schedule is derived from child tasks.', details: { reason: 'parent_schedule_derived' } },
+    })));
+    const message = '无法调整父任务日期：该任务包含子任务，开始和结束日期由子任务自动汇总。请调整子任务日期，父任务会随之更新。';
+    try {
+      await expect(apiRequest('/work-items/parent-1', { method: 'PATCH', body: JSON.stringify({ version: 1, dueDate: '2026-11-12', estimate: 3 }) })).rejects.toThrow(message);
+      expect(messages).toEqual([{ text: message, tone: 'error' }]);
+    } finally {
+      window.removeEventListener(messageEvent, listener);
+    }
+  });
+
   it('shows a Chinese message when email delivery is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(false, 503, { error: { code: 'EMAIL_DELIVERY_NOT_CONFIGURED', message: 'Email delivery is not configured.' } })));
 

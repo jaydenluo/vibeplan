@@ -53,11 +53,30 @@ export class WorkItemConflictError extends Error {
   }
 }
 
+export type WorkItemTransitionDetails = {
+  reason?: 'parent_schedule_derived';
+  currentStatus?: WorkItemStatus;
+  allowedStatuses?: WorkItemStatus[];
+  nextAction?: 'start_task' | 'submit_execution_report' | 'reopen_task';
+};
+
 export class WorkItemTransitionError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly details?: WorkItemTransitionDetails) {
     super(message);
     this.name = 'WorkItemTransitionError';
   }
+}
+
+function acceptanceTransitionDetails(currentStatus: WorkItemStatus): WorkItemTransitionDetails {
+  return {
+    currentStatus,
+    allowedStatuses: ['in_review'],
+    nextAction: currentStatus === 'done' || currentStatus === 'cancelled'
+      ? 'reopen_task'
+      : currentStatus === 'backlog' || currentStatus === 'ready'
+        ? 'start_task'
+        : 'submit_execution_report',
+  };
 }
 
 export type AcceptanceItemStatus = 'unverified' | 'passed' | 'failed' | 'needs_info';
@@ -241,7 +260,7 @@ export class WorkItemService {
       throw new WorkItemConflictError();
     }
     if ((input.dueDate !== undefined || input.estimate !== undefined) && await this.hasDirectChildren(existing.projectId, existing.id)) {
-      throw new WorkItemTransitionError('Parent task schedule is derived from child tasks.');
+      throw new WorkItemTransitionError('Parent task schedule is derived from child tasks.', { reason: 'parent_schedule_derived' });
     }
     if (input.parentId !== undefined) await this.validateParentChange(existing.projectId, existing.id, input.parentId);
     if (input.dependsOn !== undefined) await this.validateDependencies(existing.projectId, existing.id, input.dependsOn);
@@ -341,7 +360,8 @@ export class WorkItemService {
     const existing = await this.getStored(userId, workItemId);
     await this.requireReviewer(userId, existing.projectId, true);
     if (existing.version !== expectedVersion) throw new WorkItemConflictError();
-    if (existing.status === 'done') throw new WorkItemTransitionError('Reopen the task before changing its acceptance result.');
+    if (existing.status === 'done') throw new WorkItemTransitionError('Reopen the task before changing its acceptance result.', acceptanceTransitionDetails(existing.status as WorkItemStatus));
+    if (existing.status !== 'in_review') throw new WorkItemTransitionError('Acceptance criteria can only be reviewed while a work item is awaiting review.', acceptanceTransitionDetails(existing.status as WorkItemStatus));
     const index = existing.acceptanceItems.findIndex((item) => item.id === acceptanceItemId);
     if (index < 0) throw new WorkItemAccessError('Acceptance criterion does not exist.');
     const reviewedAt = this.now();
@@ -680,7 +700,11 @@ export class WorkItemService {
     await this.requireContributor(userId, existing.projectId, true);
     if (existing.version !== expectedVersion) throw new WorkItemConflictError();
     const outcome = input.outcome ?? 'success';
-    if (!['in_progress', 'blocked'].includes(existing.status)) throw new WorkItemTransitionError('Only an active task can submit an execution report.');
+    if (!['in_progress', 'blocked'].includes(existing.status)) throw new WorkItemTransitionError('Only an active task can submit an execution report.', {
+      currentStatus: existing.status as WorkItemStatus,
+      allowedStatuses: ['in_progress', 'blocked'],
+      nextAction: existing.status === 'backlog' || existing.status === 'ready' ? 'start_task' : existing.status === 'done' || existing.status === 'cancelled' ? 'reopen_task' : undefined,
+    });
     if (outcome === 'success' && input.tests.some((test) => test.outcome === 'failed' || (test.exitCode !== undefined && test.exitCode !== 0) || hasFailedTestResult(test.result))) throw new WorkItemTransitionError('A report with failed tests cannot claim successful delivery.');
     if (input.criterionResults?.some((result) => !existing.acceptanceItems.some((item) => item.id === result.acceptanceItemId))) throw new WorkItemTransitionError('Execution evidence references an unknown acceptance criterion.');
     const nextStatus = outcome === 'success' ? 'in_review' : outcome === 'blocked' ? 'blocked' : existing.status;
@@ -701,6 +725,7 @@ export class WorkItemService {
     const existing = await this.getStored(userId, workItemId);
     await this.requireReviewer(userId, existing.projectId, true);
     if (existing.version !== expectedVersion) throw new WorkItemConflictError();
+    if (existing.status !== 'in_review') throw new WorkItemTransitionError('Only a work item awaiting review can be accepted.', acceptanceTransitionDetails(existing.status as WorkItemStatus));
     if (input.decision === 'rejected' && !input.comment?.trim()) throw new WorkItemTransitionError('A rejection reason is required.');
     const nextStatus = input.decision === 'approved' ? 'done' : 'in_progress';
     const acceptanceRecorded = input.decision === 'approved' && (!hasStructuredAcceptance(existing) || await this.hasRequiredAcceptanceEvidence(existing));

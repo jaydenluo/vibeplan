@@ -26,7 +26,7 @@ const webErrorMessages: Record<string, string> = {
   FORBIDDEN: '您没有执行此操作的权限。',
   NOT_FOUND: '请求的内容不存在或已无法访问。',
   CONFLICT: '数据已发生变化，请刷新后重试。',
-  INVALID_TRANSITION: '当前状态不支持此操作。',
+  INVALID_TRANSITION: '操作条件不满足，请检查任务状态、验收结果或必填信息后重试。',
   REQUEST_ERROR: '请求处理失败，请检查后重试。',
   INTERNAL_ERROR: '服务暂时不可用，请稍后重试。',
   SYNC_RESET_REQUIRED: '本地同步记录已失效，请重新同步。',
@@ -48,7 +48,54 @@ const webErrorMessages: Record<string, string> = {
   PLATFORM_ADMIN_PROTECTED: '该管理员受保护，无法移除。',
 };
 
-function webErrorMessage(code: unknown, status: number): string {
+type WorkflowTransitionDetails = {
+  reason?: unknown;
+  currentStatus?: unknown;
+  allowedStatuses?: unknown;
+  nextAction?: unknown;
+};
+
+const statusLabels: Record<string, string> = {
+  backlog: '待规划', ready: '待开始', in_progress: '进行中', blocked: '已阻塞', in_review: '待审核', done: '已完成', cancelled: '已取消',
+};
+
+function isKnownStatus(value: unknown): value is keyof typeof statusLabels {
+  return typeof value === 'string' && value in statusLabels;
+}
+
+function nextActionMessage(nextAction: unknown): string {
+  if (nextAction === 'submit_execution_report') return '请先提交成功执行报告。';
+  if (nextAction === 'start_task') return '请先开始任务并完成执行后提交成功执行报告。';
+  if (nextAction === 'reopen_task') return '请先重新打开任务，再提交成功执行报告。';
+  return '请先将任务推进至允许的状态后重试。';
+}
+
+export function acceptanceStatusGuidance(currentStatus: string): string {
+  const status = isKnownStatus(currentStatus) ? currentStatus : undefined;
+  const nextAction = status === 'done' || status === 'cancelled'
+    ? 'reopen_task'
+    : status === 'backlog' || status === 'ready'
+      ? 'start_task'
+      : 'submit_execution_report';
+  return `无法验收：任务当前为「${status ? statusLabels[status] : currentStatus}」。验收仅支持「待审核」状态；${nextActionMessage(nextAction)}`;
+}
+
+function transitionMessage(path: string, details: WorkflowTransitionDetails): string | undefined {
+  if (details.reason === 'parent_schedule_derived') {
+    return '无法调整父任务日期：该任务包含子任务，开始和结束日期由子任务自动汇总。请调整子任务日期，父任务会随之更新。';
+  }
+  if (!isKnownStatus(details.currentStatus) || !Array.isArray(details.allowedStatuses)) return undefined;
+  const allowedStatuses = details.allowedStatuses.filter(isKnownStatus);
+  if (allowedStatuses.length === 0) return undefined;
+  const operation = path.endsWith('/accept') || path.includes('/acceptance-items/') ? '验收' : path.endsWith('/report') ? '提交执行报告' : '执行此操作';
+  return `无法${operation}：任务当前为「${statusLabels[details.currentStatus]}」。${operation}仅支持「${allowedStatuses.map((item) => statusLabels[item]).join('、')}」状态；${nextActionMessage(details.nextAction)}`;
+}
+
+function webErrorMessage(code: unknown, status: number, path: string, details?: WorkflowTransitionDetails): string {
+  if (code === 'INVALID_TRANSITION' && details) {
+    const message = transitionMessage(path, details);
+    if (message) return message;
+  }
   if (typeof code === 'string' && webErrorMessages[code]) return webErrorMessages[code];
   if (status === 401) return '登录状态已失效，请重新登录。';
   if (status === 403) return '您没有执行此操作的权限。';
@@ -116,7 +163,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, allowR
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    const message = webErrorMessage(payload.error?.code, response.status);
+    const message = webErrorMessage(payload.error?.code, response.status, path, payload.error?.details);
     if (notifyErrors) showMessage(message, 'error');
     throw new Error(message);
   }

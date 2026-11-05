@@ -1,0 +1,6 @@
+.project-task-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 180px; padding: 48px 20px; color: #84919a; text-align: center; }
+.project-task-loading p { margin: 0; font-size: 13px; line-height: 1.6; }
+.project-task-loading-spinner { display: block; width: 28px; height: 28px; flex: 0 0 auto; border: 3px solid #e3ebef; border-top-color: #2f657d; border-radius: 50%; animation: project-task-loading-spin .8s linear infinite; }
+.project-task-loading .secondary { padding: 7px 12px; font-size: 12px; }
+@keyframes project-task-loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .project-task-loading-spinner { animation: none; } }

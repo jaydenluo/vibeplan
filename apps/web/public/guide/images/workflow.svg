@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="270" viewBox="0 0 760 270" fill="none">
+  <title>Vibe Plan 协作流程示意</title>
+  <desc>规划任务、授权执行、提交报告、人工验收。需要修改时回到授权执行。</desc>
+  <rect width="760" height="270" rx="12" fill="#F3F7F9"/>
+  <g font-family="system-ui, -apple-system, sans-serif" fill="#244454">
+    <text x="30" y="38" font-size="15" font-weight="650">从一个明确的目标，到一次有据可查的交付</text>
+    <text x="30" y="62" font-size="12" fill="#637580">Vibe Plan · 协作流程示意</text>
+    <g stroke="#D8E0E5" fill="white"><rect x="30" y="94" width="148" height="82" rx="8"/><rect x="214" y="94" width="148" height="82" rx="8"/><rect x="398" y="94" width="148" height="82" rx="8"/><rect x="582" y="94" width="148" height="82" rx="8"/></g>
+    <g text-anchor="middle" font-size="17" font-weight="650"><text x="104" y="126">规划任务</text><text x="288" y="126">授权执行</text><text x="472" y="126">提交报告</text><text x="656" y="126">人工验收</text></g>
+    <g text-anchor="middle" font-size="12" fill="#637580"><text x="104" y="152">目标与验收标准</text><text x="288" y="152">计划、实现与测试</text><text x="472" y="152">改动与验证证据</text><text x="656" y="152">逐项检查后批准</text></g>
+    <g stroke="#2F657D" stroke-width="2"><path d="M181 135h25m-6-5 6 5-6 5M365 135h25m-6-5 6 5-6 5M549 135h25m-6-5 6 5-6 5"/><path d="M656 186v43H288v-43m-5 6 5-6 5 6" stroke-dasharray="4 4"/></g>
+    <rect x="391" y="216" width="167" height="24" rx="4" fill="#F3F7F9"/>
+    <text x="474" y="232" font-size="12" text-anchor="middle" fill="#2F657D">退回意见 → 原任务继续修复</text>
+  </g>
+</svg>

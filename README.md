@@ -9,13 +9,13 @@ Vibe Plan 是一个面向 AI 编程协作的任务管理平台。它把 Codex、
 团队可以通过 Web 可视化管理项目、任务、进度、验收和执行记录，并查看成员负载、实际工时、任务完成情况和代码贡献统计；开发者在本地 Git 项目中使用 `vibeplan` CLI，与 Web 端保持同步。这样，AI 负责协助完成工作，人可以随时查看方向、进展和结果。
 
 > [!TIP]
-> **🤝 赞助商 · [TokenFLS GPT 中转站](https://www.tokenfls.com)**
+> **🤝 赞助商 · [TokenFLS GPT 中转站](https://www.tokenfls.com/register?aff=6C336V8Y23QX)**
 >
 > **让 AI 编程更尽兴，让调用成本更轻。不降智，不 Overload。**
 >
 > 限量开放开发者用户，专注服务质量与调用稳定性。**¥1 人民币即可获得 $1 美金额度**，叠加超低模型计费倍率，让每一份预算支持更多开发尝试。
 >
-> [前往 TokenFLS，了解模型与价格 →](https://www.tokenfls.com)
+> [前往 TokenFLS，了解模型与价格 →](https://www.tokenfls.com/register?aff=6C336V8Y23QX)
 
 ## 项目界面
 
